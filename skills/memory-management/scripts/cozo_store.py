@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from pathlib import Path
 
 from pycozo.client import Client
@@ -179,7 +180,7 @@ class CozoStore:
                 ?[id, project, name, node_type, level, description, status, origin,
                   tokens_estimate, created_at, updated_at] :=
                   *node{id, project, name, node_type, level, description, status, origin,
-                    tokens_estimate, created_at, updated_at},
+                        tokens_estimate, created_at, updated_at},
                   project = $p
                 """,
                 {"p": project},
@@ -190,7 +191,7 @@ class CozoStore:
                 ?[id, project, name, node_type, level, description, status, origin,
                   tokens_estimate, created_at, updated_at] :=
                   *node{id, project, name, node_type, level, description, status, origin,
-                    tokens_estimate, created_at, updated_at},
+                        tokens_estimate, created_at, updated_at},
                   project = $p, status = $s
                 """,
                 {"p": project, "s": status},
@@ -200,46 +201,236 @@ class CozoStore:
         return [Node(**dict(zip(cols, row))) for row in result["rows"]]
 
     def add_edge(self, edge: Edge) -> None:
-        raise NotImplementedError
+        self.ensure_schema()
+        if edge.kind == "hierarchy":
+            self.client.run(
+                """
+                ?[parent_id, child_id, order_idx] <- [[$f, $t, $o]]
+                :put edge_hierarchy {parent_id, child_id => order_idx}
+                """,
+                {"f": edge.from_id, "t": edge.to_id, "o": edge.order_idx},
+            )
+        elif edge.kind == "dependency":
+            self.client.run(
+                """
+                ?[from_id, to_id, dep_type] <- [[$f, $t, $d]]
+                :put edge_dependency {from_id, to_id => dep_type}
+                """,
+                {"f": edge.from_id, "t": edge.to_id, "d": edge.dep_type},
+            )
+        else:
+            raise StoreError(f"unknown edge kind: {edge.kind}")
 
     def remove_edge(self, kind: str, from_id: str, to_id: str) -> None:
-        raise NotImplementedError
+        self.ensure_schema()
+        if kind == "hierarchy":
+            self.client.run(
+                """
+                ?[parent_id, child_id] <- [[$f, $t]]
+                :rm edge_hierarchy {parent_id, child_id}
+                """,
+                {"f": from_id, "t": to_id},
+            )
+        elif kind == "dependency":
+            self.client.run(
+                """
+                ?[from_id, to_id] <- [[$f, $t]]
+                :rm edge_dependency {from_id, to_id}
+                """,
+                {"f": from_id, "t": to_id},
+            )
 
     def query_children(self, project: str, node_id: str) -> list[Node]:
-        raise NotImplementedError
+        self.ensure_schema()
+        result = self.client.run(
+            """
+            ?[id, project, name, node_type, level, description, status, origin,
+              tokens_estimate, created_at, updated_at, order_idx] :=
+              *edge_hierarchy{parent_id: $p, child_id: id, order_idx},
+              *node{id, project, name, node_type, level, description, status, origin,
+                    tokens_estimate, created_at, updated_at},
+              project = $proj
+            :order order_idx
+            """,
+            {"p": node_id, "proj": project},
+        )
+        cols = result["headers"]
+        return [
+            Node(**{k: dict(zip(cols, row))[k] for k in Node.__dataclass_fields__})
+            for row in result["rows"]
+        ]
 
     def query_ancestors(self, project: str, node_id: str) -> list[Node]:
-        raise NotImplementedError
+        chain: list[Node] = []
+        current = node_id
+        seen = set()
+        while True:
+            if current in seen:
+                break
+            seen.add(current)
+            result = self.client.run(
+                "?[parent_id] := *edge_hierarchy{parent_id, child_id: $c}",
+                {"c": current},
+            )
+            if not result["rows"]:
+                break
+            current = result["rows"][0][0]
+            chain.append(self.get_node(project, current))
+        return chain
 
     def query_subtree(self, project: str, root_id: str) -> list[Node]:
-        raise NotImplementedError
+        out = [self.get_node(project, root_id)]
+        for child in self.query_children(project, root_id):
+            out.extend(self.query_subtree(project, child.id))
+        return out
 
     def query_deps(self, project: str, node_id: str) -> list[Node]:
-        raise NotImplementedError
+        self.ensure_schema()
+        result = self.client.run(
+            "?[to_id] := *edge_dependency{from_id: $f, to_id}",
+            {"f": node_id},
+        )
+        return [self.get_node(project, row[0]) for row in result["rows"]]
 
     def detect_cycles(self, project: str) -> list[list[str]]:
-        raise NotImplementedError
+        result = self.client.run("?[from_id, to_id] := *edge_dependency{from_id, to_id}")
+        adj = defaultdict(list)
+        for src, dst in result["rows"]:
+            adj[src].append(dst)
+
+        white, gray, black = 0, 1, 2
+        color = defaultdict(lambda: white)
+        cycles: list[list[str]] = []
+        stack: list[str] = []
+
+        def dfs(node_id: str) -> None:
+            color[node_id] = gray
+            stack.append(node_id)
+            for nxt in adj[node_id]:
+                if color[nxt] == gray:
+                    idx = stack.index(nxt)
+                    cycles.append(stack[idx:] + [nxt])
+                elif color[nxt] == white:
+                    dfs(nxt)
+            stack.pop()
+            color[node_id] = black
+
+        for node_id in list(adj.keys()):
+            if color[node_id] == white:
+                dfs(node_id)
+        return cycles
 
     def store_decision(self, decision: Decision) -> None:
-        raise NotImplementedError
+        self.ensure_schema()
+        self.client.run(
+            """
+            ?[id, node_id, question, options, chosen, reasoning, tradeoffs, created_at] <- [[
+                $id, $node_id, $question, $options, $chosen, $reasoning, $tradeoffs, $created_at
+            ]]
+            :put decision {id, node_id => question, options, chosen, reasoning, tradeoffs, created_at}
+            """,
+            decision.to_dict(),
+        )
 
     def list_decisions(self, project: str, node_id: str) -> list[Decision]:
-        raise NotImplementedError
+        self.ensure_schema()
+        result = self.client.run(
+            """
+            ?[id, node_id, question, options, chosen, reasoning, tradeoffs, created_at] :=
+              *decision{id, node_id, question, options, chosen, reasoning, tradeoffs, created_at},
+              node_id = $n
+            """,
+            {"n": node_id},
+        )
+        cols = result["headers"]
+        return [Decision(**dict(zip(cols, row))) for row in result["rows"]]
 
     def add_interface(self, iface: Interface) -> None:
-        raise NotImplementedError
+        self.ensure_schema()
+        self.client.run(
+            """
+            ?[id, node_id, name, description, spec, created_at] <- [[
+                $id, $node_id, $name, $description, $spec, $created_at
+            ]]
+            :put interface_def {id, node_id => name, description, spec, created_at}
+            """,
+            iface.to_dict(),
+        )
 
     def list_interfaces(self, project: str, node_id: str) -> list[Interface]:
-        raise NotImplementedError
+        self.ensure_schema()
+        result = self.client.run(
+            """
+            ?[id, node_id, name, description, spec, created_at] :=
+              *interface_def{id, node_id, name, description, spec, created_at},
+              node_id = $n
+            """,
+            {"n": node_id},
+        )
+        cols = result["headers"]
+        return [Interface(**dict(zip(cols, row))) for row in result["rows"]]
 
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]:
-        raise NotImplementedError
+        import re
+
+        terms = [t.lower() for t in re.findall(r"\w+", query)]
+        nodes = self.list_nodes(project)
+        scored: list[ScoredNode] = []
+        for node in nodes:
+            text = (node.name + " " + node.description).lower()
+            score = sum(text.count(t) for t in terms)
+            if score > 0:
+                scored.append(ScoredNode(node=node, score=float(score), match_type="bm25"))
+        scored.sort(key=lambda s: s.score, reverse=True)
+        return scored[:k]
 
     def assemble_context(self, project: str, leaf_id: str) -> ContextPackage:
-        raise NotImplementedError
+        leaf = self.get_node(project, leaf_id)
+        ancestors_nodes = self.query_ancestors(project, leaf_id)
+        ancestors = [a.to_dict() for a in ancestors_nodes]
+
+        decisions = [d.to_dict() for d in self.list_decisions(project, leaf_id)]
+        for ancestor in ancestors_nodes:
+            decisions.extend(d.to_dict() for d in self.list_decisions(project, ancestor.id))
+
+        interfaces = [i.to_dict() for i in self.list_interfaces(project, leaf_id)]
+        deps_nodes = self.query_deps(project, leaf_id)
+        for dep_node in deps_nodes:
+            interfaces.extend(i.to_dict() for i in self.list_interfaces(project, dep_node.id))
+
+        total_chars = (
+            len(leaf.description)
+            + sum(len(a["description"]) for a in ancestors)
+            + sum(len(d["reasoning"]) + len(d["tradeoffs"]) for d in decisions)
+            + sum(len(i["spec"]) for i in interfaces)
+        )
+
+        return ContextPackage(
+            node=leaf.to_dict(),
+            ancestors=ancestors,
+            decisions=decisions,
+            interfaces=interfaces,
+            deps=[d.to_dict() for d in deps_nodes],
+            tokens_estimate=total_chars // 4,
+        )
 
     def validate(self, project: str) -> dict:
-        raise NotImplementedError
+        violations: list[dict] = []
+        for node in self.list_nodes(project):
+            if node.node_type == "branch" and not self.list_decisions(project, node.id):
+                violations.append({"node_id": node.id, "rule": "branch_requires_decision"})
+            if node.node_type == "leaf" and not self.list_interfaces(project, node.id):
+                violations.append({"node_id": node.id, "rule": "leaf_requires_interface"})
+        return {"passed": len(violations) == 0, "violations": violations}
 
     def stats(self, project: str) -> dict:
-        raise NotImplementedError
+        nodes = self.list_nodes(project)
+        total = len(nodes)
+        inferred = sum(1 for n in nodes if n.origin == "skill_inferred")
+        ratio = (inferred / total) if total else 0.0
+        return {
+            "total_nodes": total,
+            "skill_inferred_nodes": inferred,
+            "user_stated_nodes": total - inferred,
+            "skill_inferred_node_ratio": round(ratio, 4),
+        }
