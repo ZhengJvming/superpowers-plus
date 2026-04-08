@@ -1,10 +1,13 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-SCRIPTS = Path(__file__).parent.parent / "scripts"
+ROOT = Path(__file__).parent.parent
+SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(ROOT))
 
 
 @pytest.fixture
