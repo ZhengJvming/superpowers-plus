@@ -1,6 +1,6 @@
 ---
 name: using-superpowers
-description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+description: Use when starting any conversation to identify the smallest correct workflow skill before responding or acting
 ---
 
 <SUBAGENT-STOP>
@@ -45,30 +45,96 @@ Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-too
 
 **Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
 
+**Use the lightest workflow that can safely handle the task.** Do not force simple work through heavyweight routing, and do not force oversized work through a local workflow.
+
+## Route by Task Size
+
+### Simple / Local
+
+Use the direct path when all of these are true:
+- one clear outcome
+- one bounded subsystem or bug area
+- no architectural uncertainty
+- no persistent decomposition state needed
+
+Typical route:
+- `systematic-debugging` for bugs
+- `test-driven-development` for small feature or refactor work
+
+Do not invoke `pyramid-decomposition` for this class of task.
+
+### Bounded Multi-Step
+
+Use the normal design and planning path when the task is real project work but still fits one coherent spec and one implementation plan.
+
+Typical route:
+- `brainstorming`
+- `writing-plans`
+- `subagent-driven-development` or `executing-plans`
+
+### Large / Fuzzy / Cross-Boundary
+
+Escalate when any of these are true:
+- the requirement naturally splits into multiple independently implementable units
+- the user intent is too fuzzy for one clean plan
+- the work spans multiple subsystems or boundaries
+- an existing codebase must be structurally mapped before safe planning
+
+Typical route:
+- `brainstorming` only long enough to confirm that escalation is needed
+- `pyramid-decomposition`
+- `memory-management`
+- leaf handoff into `writing-plans` or `subagent-driven-development`
+
+### Analytical / Review
+
+Use this route when the user asks to:
+- review architecture
+- analyze dependencies
+- map a codebase
+- inspect hotspots
+
+Typical route:
+- `codebase-exploration` in standalone review mode
+
+Do not automatically trigger `brainstorming` or `pyramid-decomposition` for pure architecture review.
+
+### Refactoring
+
+Use these rules:
+- single-module refactor -> `Simple / Local`
+- cross-module boundary or interface refactor -> `Large / Fuzzy / Cross-Boundary`
+- refactor discovered during debugging -> start from `systematic-debugging` escalation output
+
 ```dot
 digraph skill_flow {
     "User message received" [shape=doublecircle];
-    "About to EnterPlanMode?" [shape=doublecircle];
-    "Already brainstormed?" [shape=diamond];
-    "Invoke brainstorming skill" [shape=box];
     "Might any skill apply?" [shape=diamond];
     "Invoke Skill tool" [shape=box];
     "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Classify task size" [shape=diamond];
+    "Direct workflow\n(debugging/TDD)" [shape=box];
+    "Normal workflow\n(brainstorming -> writing-plans)" [shape=box];
+    "Escalate workflow\n(pyramid-decomposition)" [shape=box];
+    "Analytical workflow\n(codebase-exploration)" [shape=box];
     "Has checklist?" [shape=diamond];
     "Create TodoWrite todo per item" [shape=box];
     "Follow skill exactly" [shape=box];
     "Respond (including clarifications)" [shape=doublecircle];
 
-    "About to EnterPlanMode?" -> "Already brainstormed?";
-    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
-    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
-    "Invoke brainstorming skill" -> "Might any skill apply?";
-
     "User message received" -> "Might any skill apply?";
     "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
     "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
     "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
-    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Announce: 'Using [skill] to [purpose]'" -> "Classify task size";
+    "Classify task size" -> "Direct workflow\n(debugging/TDD)" [label="simple/local"];
+    "Classify task size" -> "Normal workflow\n(brainstorming -> writing-plans)" [label="bounded multi-step"];
+    "Classify task size" -> "Escalate workflow\n(pyramid-decomposition)" [label="large/fuzzy"];
+    "Classify task size" -> "Analytical workflow\n(codebase-exploration)" [label="analysis/review"];
+    "Direct workflow\n(debugging/TDD)" -> "Has checklist?";
+    "Normal workflow\n(brainstorming -> writing-plans)" -> "Has checklist?";
+    "Escalate workflow\n(pyramid-decomposition)" -> "Has checklist?";
+    "Analytical workflow\n(codebase-exploration)" -> "Has checklist?";
     "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
     "Has checklist?" -> "Follow skill exactly" [label="no"];
     "Create TodoWrite todo per item" -> "Follow skill exactly";
@@ -89,7 +155,7 @@ These thoughts mean STOP—you're rationalizing:
 | "This doesn't need a formal skill" | If a skill exists, use it. |
 | "I remember this skill" | Skills evolve. Read current version. |
 | "This doesn't count as a task" | Action = task. Check for skills. |
-| "The skill is overkill" | Simple things become complex. Use it. |
+| "The big workflow is overkill" | Route to the smallest workflow that safely fits. |
 | "I'll just do this one thing first" | Check BEFORE doing anything. |
 | "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
 | "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
@@ -98,10 +164,10 @@ These thoughts mean STOP—you're rationalizing:
 
 When multiple skills could apply, use this order:
 
-1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+1. **Routing/process skills first** (brainstorming, debugging, pyramid-decomposition) - these determine HOW to approach the task
 2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
 
-"Let's build X" → brainstorming first, then implementation skills.
+"Let's build X" → classify first, then choose the smallest correct workflow.
 "Fix this bug" → debugging first, then domain-specific skills.
 
 ## Skill Types
