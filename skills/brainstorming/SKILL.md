@@ -66,6 +66,14 @@ Do not escalate when all of these are true:
 If escalation is required, stop local-detail brainstorming and switch into `pyramid-decomposition`.
 If escalation is not required but the task is still larger than a one-loop fix, finish this skill and hand off to `writing-plans`.
 
+### Inbound from Debugging Escalation
+
+If this skill was reached from `systematic-debugging`:
+- read scratchpad findings first
+- treat the debugging summary as established context
+- focus on redesign or refactor shape, not on rediscovering the bug
+- if the debugging session already mapped the relevant codebase, you may skip the normal context-exploration step
+
 ## Process Flow
 
 ```dot

@@ -86,6 +86,26 @@ Typical route:
 - `memory-management`
 - leaf handoff into `writing-plans` or `subagent-driven-development`
 
+### Analytical / Review
+
+Use this route when the user asks to:
+- review architecture
+- analyze dependencies
+- map a codebase
+- inspect hotspots
+
+Typical route:
+- `codebase-exploration` in standalone review mode
+
+Do not automatically trigger `brainstorming` or `pyramid-decomposition` for pure architecture review.
+
+### Refactoring
+
+Use these rules:
+- single-module refactor -> `Simple / Local`
+- cross-module boundary or interface refactor -> `Large / Fuzzy / Cross-Boundary`
+- refactor discovered during debugging -> start from `systematic-debugging` escalation output
+
 ```dot
 digraph skill_flow {
     "User message received" [shape=doublecircle];
@@ -96,6 +116,7 @@ digraph skill_flow {
     "Direct workflow\n(debugging/TDD)" [shape=box];
     "Normal workflow\n(brainstorming -> writing-plans)" [shape=box];
     "Escalate workflow\n(pyramid-decomposition)" [shape=box];
+    "Analytical workflow\n(codebase-exploration)" [shape=box];
     "Has checklist?" [shape=diamond];
     "Create TodoWrite todo per item" [shape=box];
     "Follow skill exactly" [shape=box];
@@ -109,9 +130,11 @@ digraph skill_flow {
     "Classify task size" -> "Direct workflow\n(debugging/TDD)" [label="simple/local"];
     "Classify task size" -> "Normal workflow\n(brainstorming -> writing-plans)" [label="bounded multi-step"];
     "Classify task size" -> "Escalate workflow\n(pyramid-decomposition)" [label="large/fuzzy"];
+    "Classify task size" -> "Analytical workflow\n(codebase-exploration)" [label="analysis/review"];
     "Direct workflow\n(debugging/TDD)" -> "Has checklist?";
     "Normal workflow\n(brainstorming -> writing-plans)" -> "Has checklist?";
     "Escalate workflow\n(pyramid-decomposition)" -> "Has checklist?";
+    "Analytical workflow\n(codebase-exploration)" -> "Has checklist?";
     "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
     "Has checklist?" -> "Follow skill exactly" [label="no"];
     "Create TodoWrite todo per item" -> "Follow skill exactly";
