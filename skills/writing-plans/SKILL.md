@@ -20,7 +20,25 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 ## Scope Check
 
+Do not write a full plan for a trivially bounded change. If one direct TDD loop or one tight bugfix workflow is enough, route back to the direct implementation path instead of creating a large plan artifact.
+
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+
+## Context from Pyramid Memory
+
+If the plan is being written for a leaf from `pyramid-decomposition`, fetch its context package first:
+
+```bash
+python3 ../memory-management/scripts/run_memory_cli.py memory context --node <leaf-id>
+```
+
+Use:
+- `decisions` to preserve design intent
+- `interfaces` to define task-level API shapes
+- `deps` to understand what is already stable versus what the plan must build
+
+Do not re-derive this structure from scratch if the memory package already exists.
+The leaf package is authoritative. Do not replace it with a full-tree dump.
 
 ## File Structure
 

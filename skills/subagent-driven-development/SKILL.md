@@ -37,6 +37,27 @@ digraph when_to_use {
 - Two-stage review after each task: spec compliance first, then code quality
 - Faster iteration (no human-in-loop between tasks)
 
+## Context Loading from Pyramid Memory
+
+If the implementation plan came from `pyramid-decomposition`, each task may map to a leaf in the workspace-local pyramid store under `<workspace-root>/.superpowers/pyramid-memory/`. Before dispatching the implementer subagent, fetch that leaf's package:
+
+```bash
+python3 ../memory-management/scripts/run_memory_cli.py memory context --node <leaf-id>
+```
+
+Pass the returned JSON into the subagent prompt as its context block. Do not pass the whole pyramid. The package already contains:
+- leaf description
+- ancestor decisions
+- leaf interfaces
+- dependency interfaces
+- token estimate
+
+After the leaf is implemented, mark it done:
+
+```bash
+python3 ../memory-management/scripts/run_memory_cli.py node update --id <leaf-id> --status done
+```
+
 ## The Process
 
 ```dot
