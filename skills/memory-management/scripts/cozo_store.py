@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from pathlib import Path
 
 from pycozo.client import Client
@@ -382,10 +382,10 @@ class CozoStore:
             raise StoreError(f"invalid impact direction: {direction}")
 
         visited: set[str] = set()
-        queue = [node_id]
+        queue = deque([node_id])
         ordered: list[Node] = []
         while queue:
-            current = queue.pop(0)
+            current = queue.popleft()
             neighbors = (
                 self.query_deps(project, current)
                 if direction == "downstream"

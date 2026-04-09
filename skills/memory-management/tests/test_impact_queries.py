@@ -2,7 +2,7 @@ import pytest
 
 from scripts.cozo_store import CozoStore
 from scripts.models import Edge, Node
-from scripts.store import InMemoryStore
+from scripts.store import InMemoryStore, StoreError
 
 
 def make_node(id: str, **overrides):
@@ -64,3 +64,9 @@ def test_query_impact_closure_handles_cycles(store):
     store.add_edge(Edge(kind="dependency", from_id="c", to_id="a"))
     impacted = store.query_impact_closure("demo", "a", direction="downstream")
     assert {node.id for node in impacted} == {"b", "c", "d"}
+
+
+def test_query_impact_closure_rejects_invalid_direction(store):
+    _seed_graph(store)
+    with pytest.raises(StoreError, match="invalid impact direction"):
+        store.query_impact_closure("demo", "a", direction="sideways")

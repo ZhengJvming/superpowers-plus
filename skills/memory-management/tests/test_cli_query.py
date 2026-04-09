@@ -154,3 +154,10 @@ def test_query_impact_upstream(initialized):
     r = initialized("query", "impact", "--id", "b", "--direction", "upstream")
     ids = [n["id"] for n in json.loads(r.stdout)["data"]["nodes"]]
     assert ids == ["a"]
+
+
+def test_query_impact_invalid_direction(initialized):
+    _seed_pyramid(initialized)
+    r = initialized("query", "impact", "--id", "a", "--direction", "sideways")
+    assert r.returncode != 0
+    assert "Invalid value for '--direction'" in r.stderr

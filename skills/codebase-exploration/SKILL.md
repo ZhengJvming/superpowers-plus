@@ -32,7 +32,7 @@ Do not ask the user whether to explore the codebase when Mode A is triggered. Th
 2. If stale, run `python3 ../memory-management/scripts/run_memory_cli.py memory refresh`.
 3. Identify top-level modules and major entry points.
 4. Extract internal dependency edges between mapped modules.
-5. Run `python3 ../memory-management/scripts/run_memory_cli.py memory hotspots`.
+5. Run `python3 ../memory-management/scripts/run_memory_cli.py memory hotspots --days 90 --top 20`.
 6. Record hotspot and architecture findings in scratchpad or decisions.
 7. For change work, create `existing_module` or `change_*` nodes for the area you are about to modify.
 8. Add `file-ref` entries for the concrete files that define that boundary.

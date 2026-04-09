@@ -71,6 +71,7 @@ python3 ../memory-management/scripts/run_memory_cli.py query impact --id <node-i
 
 Use the result to decide which modules need `change_*` nodes.
 Do not create change nodes for unaffected modules.
+Use `--direction upstream` as a complementary trace when you need to identify likely source modules or inbound risk, not just outward blast radius.
 
 ## Budget
 
