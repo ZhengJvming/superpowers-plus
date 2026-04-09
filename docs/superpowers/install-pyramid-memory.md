@@ -20,11 +20,27 @@ Verify:
 uv --version
 ```
 
+## Standard `uv` Environment
+
+Use workspace-local cache plus the Tsinghua mirror for every `uv` invocation in this guide:
+
+```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
+uv run ...
+```
+
+This avoids sandbox failures caused by default user-level cache directories such as `~/.cache/uv`.
+
 ## One-Time Initialization
 
 After `superpowers-plus` is installed for your harness, initialize the shared store once:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run <path-to-superpowers-plus>/skills/memory-management/scripts/memory_cli.py \
   init --project <project-name> --embedding skip --non-interactive
 ```
@@ -55,6 +71,9 @@ Skills are typically loaded from `~/.codex/skills/superpowers-plus/skills/` or a
 The app sandbox can restrict network and filesystem access. Recommended configuration:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run <path>/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
@@ -77,6 +96,9 @@ Use the harness-specific skill loading path, but the CLI invocation stays the sa
 After init:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run <path>/memory_cli.py memory doctor
 ```
 

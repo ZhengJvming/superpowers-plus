@@ -33,6 +33,9 @@ Why: A leaf without a contract forces the implementer to invent inputs and outpu
 CLI check:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
@@ -81,6 +84,9 @@ Why: The whole point of the pyramid is bounded context per leaf.
 CLI check:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
@@ -100,6 +106,9 @@ Why: Depending on a mutable, contract-less node means the leaf is built on unsta
 CLI check:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
@@ -120,6 +129,9 @@ If it fails:
 When all five pass:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node update \
   --id <leaf-id> \
   --status leaf \

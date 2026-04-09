@@ -19,9 +19,21 @@ Do not use it to decompose requirements or write code. It stores and retrieves t
 ## Prerequisites
 
 1. `uv` must be installed.
-2. The store must be initialized once:
+2. Run all `uv` commands in this skill with workspace-local cache and the Tsinghua mirror:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
+uv run ...
+```
+
+3. The store must be initialized once:
+
+```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
@@ -32,6 +44,9 @@ By default the CLI resolves the workspace root from the current directory and st
 Run this once per session:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py config show
 ```
 
@@ -94,6 +109,9 @@ Interpretation:
 Before dispatching work for one leaf:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
 ```
 
@@ -115,6 +133,9 @@ If any file ref in the package has `status: stale`, re-read that file before mak
 At session start on an existing codebase:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory freshness
 ```
 
@@ -126,6 +147,9 @@ Interpretation:
 When a file changes after the last scan:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory refresh
 ```
 
@@ -164,8 +188,17 @@ Before any of these actions:
 Run:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py scratch list
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<what you're about to decide>" --k 3
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <current-node> --summary
 ```
 
@@ -176,6 +209,9 @@ Synthesize those three inputs before acting.
 Before marking a node as `leaf`:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
@@ -186,6 +222,9 @@ Then do the LLM-only checks:
 If all pass:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node update \
   --id <leaf-id> \
   --status leaf \

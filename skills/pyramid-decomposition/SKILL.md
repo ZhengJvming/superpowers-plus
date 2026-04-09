@@ -25,7 +25,16 @@ Do not use it for:
 
 1. `memory-management` must be available.
 2. `uv` must be installed.
-3. `memory config show` must report `initialized: true`, or you initialize the store first.
+3. Run all `uv` commands in this skill with workspace-local cache and the Tsinghua mirror:
+
+```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
+uv run ...
+```
+
+4. `memory config show` must report `initialized: true`, or you initialize the store first.
 
 ## Workflow
 
@@ -34,12 +43,18 @@ Do not use it for:
 Run:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py config show
 ```
 
 If uninitialized:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
@@ -48,6 +63,9 @@ The memory store is workspace-local by default and lives under `<workspace-root>
 Then create the L0 root from the user's raw requirement:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node create \
   --id root \
   --name "<short-title>" \
@@ -94,8 +112,17 @@ Do not load:
    - run the pre-decision recall gate:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py scratch list
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<what you are about to decide>" --k 3
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <node-id> --summary
 ```
 
@@ -108,6 +135,9 @@ uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <node
 For each accepted child:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node create \
   --id <child-id> \
   --name "<child-name>" \
@@ -116,6 +146,9 @@ uv run skills/memory-management/scripts/memory_cli.py node create \
   --description "<one-sentence description>" \
   --origin <user_stated|skill_inferred>
 
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py edge add \
   --kind hierarchy \
   --from <parent-id> \
@@ -125,6 +158,9 @@ uv run skills/memory-management/scripts/memory_cli.py edge add \
 Record the split decision on the parent:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py decision store \
   --id "d-split-<node-id>" \
   --node <node-id> \
@@ -144,6 +180,9 @@ Before marking a node as `leaf`:
 1. Publish at least one interface:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py interface add \
   --id "iface-<leaf-id>" \
   --node <leaf-id> \
@@ -155,6 +194,9 @@ uv run skills/memory-management/scripts/memory_cli.py interface add \
 2. Run the mechanical criteria check:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
@@ -165,6 +207,9 @@ uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria
 4. If all five pass:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node update \
   --id <leaf-id> \
   --status leaf \
@@ -178,12 +223,18 @@ If any criterion fails, the node is still a branch. Split again or stabilize its
 After leaves exist, add cross-leaf dependencies explicitly:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py edge add --kind dependency --from <leaf-a> --to <leaf-b>
 ```
 
 Then verify no cycles:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py query cycles
 ```
 
@@ -194,7 +245,13 @@ If a cycle appears, remove the weakest dependency or extract the shared abstract
 Run:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory validate
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory stats
 ```
 
@@ -205,6 +262,9 @@ Expected:
 When the pyramid is ready, hand off one leaf at a time:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
 ```
 
