@@ -37,3 +37,9 @@
 - All 3 scenarios PASS
 - User input remained a short fuzzy requirement in each scenario
 - Status: PASS
+
+## Enhanced Routing Evals
+
+- `04_simple-task-no-pyramid.md`: added, pending execution on the redesign branch
+- `05_large-task-escalates.md`: added, pending execution on the redesign branch
+- `06_existing-project-routing.md`: added, pending execution on the redesign branch
