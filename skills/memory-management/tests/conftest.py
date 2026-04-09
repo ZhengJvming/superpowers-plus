@@ -10,6 +10,26 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(ROOT))
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "skipif_fastembed_unavailable: skip if fastembed is not installed"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    try:
+        import fastembed  # noqa: F401
+
+        available = True
+    except ImportError:
+        available = False
+    if not available:
+        skip = pytest.mark.skip(reason="fastembed not available")
+        for item in items:
+            if "skipif_fastembed_unavailable" in item.keywords:
+                item.add_marker(skip)
+
+
 @pytest.fixture
 def run_cli(tmp_path, monkeypatch):
     """Run memory_cli.py with HOME redirected to tmp_path."""

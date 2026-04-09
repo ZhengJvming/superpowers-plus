@@ -5,8 +5,12 @@ from pathlib import Path
 
 from pycozo.client import Client
 
-from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
-from .store import NodeNotFound, StoreError
+try:
+    from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from .store import NodeNotFound, StoreError
+except ImportError:
+    from models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from store import NodeNotFound, StoreError
 
 SCHEMA_RELATIONS = [
     """:create node {
@@ -22,7 +26,7 @@ SCHEMA_RELATIONS = [
         tokens_estimate: Int default 0,
         created_at: String,
         updated_at: String,
-        embedding: <F32; 1024>?
+        embedding: <F32; 384>?
     }""",
     """:create edge_hierarchy {
         parent_id: String,
@@ -59,7 +63,7 @@ SCHEMA_RELATIONS = [
 ]
 
 HNSW_INDEX = """::hnsw create node:embedding_idx {
-    dim: 1024,
+    dim: 384,
     m: 16,
     ef_construction: 200,
     fields: [embedding],
@@ -69,8 +73,9 @@ HNSW_INDEX = """::hnsw create node:embedding_idx {
 
 
 class CozoStore:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, embedding_provider=None):
         self.db_path = db_path
+        self.embedding_provider = embedding_provider
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.client = Client("sqlite", db_path, dataframe=False)
         self._schema_ready = False
@@ -103,22 +108,39 @@ class CozoStore:
             raise StoreError(f"node already exists: {node.id}")
 
         params = node.to_dict()
-        params["embedding"] = None
-
-        self.client.run(
-            """
-            ?[id, project, name, node_type, level, description, status, origin,
-              tokens_estimate, created_at, updated_at, embedding] <- [[
-                $id, $project, $name, $node_type, $level, $description, $status, $origin,
-                $tokens_estimate, $created_at, $updated_at, $embedding
-            ]]
-            :put node {
-                id, project => name, node_type, level, description, status, origin,
-                tokens_estimate, created_at, updated_at, embedding
-            }
-            """,
-            params,
-        )
+        embedding = self._embed_text(f"{node.name} {node.description}")
+        if embedding is None:
+            params["embedding"] = None
+            self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at, embedding] <- [[
+                    $id, $project, $name, $node_type, $level, $description, $status, $origin,
+                    $tokens_estimate, $created_at, $updated_at, $embedding
+                ]]
+                :put node {
+                    id, project => name, node_type, level, description, status, origin,
+                    tokens_estimate, created_at, updated_at, embedding
+                }
+                """,
+                params,
+            )
+        else:
+            params["embedding"] = embedding
+            self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at, embedding] <- [[
+                    $id, $project, $name, $node_type, $level, $description, $status, $origin,
+                    $tokens_estimate, $created_at, $updated_at, vec($embedding)
+                ]]
+                :put node {
+                    id, project => name, node_type, level, description, status, origin,
+                    tokens_estimate, created_at, updated_at, embedding
+                }
+                """,
+                params,
+            )
 
     def get_node(self, project: str, node_id: str) -> Node:
         self.ensure_schema()
@@ -144,22 +166,40 @@ class CozoStore:
         existing = self.get_node(project, node_id)
         updated = existing.to_dict()
         updated.update(fields)
-        updated["embedding"] = None
 
-        self.client.run(
-            """
-            ?[id, project, name, node_type, level, description, status, origin,
-              tokens_estimate, created_at, updated_at, embedding] <- [[
-                $id, $project, $name, $node_type, $level, $description, $status, $origin,
-                $tokens_estimate, $created_at, $updated_at, $embedding
-            ]]
-            :put node {
-                id, project => name, node_type, level, description, status, origin,
-                tokens_estimate, created_at, updated_at, embedding
-            }
-            """,
-            updated,
-        )
+        embedding = self._embed_text(f"{updated['name']} {updated['description']}")
+        if embedding is None:
+            updated["embedding"] = None
+            self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at, embedding] <- [[
+                    $id, $project, $name, $node_type, $level, $description, $status, $origin,
+                    $tokens_estimate, $created_at, $updated_at, $embedding
+                ]]
+                :put node {
+                    id, project => name, node_type, level, description, status, origin,
+                    tokens_estimate, created_at, updated_at, embedding
+                }
+                """,
+                updated,
+            )
+        else:
+            updated["embedding"] = embedding
+            self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at, embedding] <- [[
+                    $id, $project, $name, $node_type, $level, $description, $status, $origin,
+                    $tokens_estimate, $created_at, $updated_at, vec($embedding)
+                ]]
+                :put node {
+                    id, project => name, node_type, level, description, status, origin,
+                    tokens_estimate, created_at, updated_at, embedding
+                }
+                """,
+                updated,
+            )
         return Node(**{k: updated[k] for k in Node.__dataclass_fields__})
 
     def delete_node(self, project: str, node_id: str) -> None:
@@ -373,6 +413,45 @@ class CozoStore:
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]:
         import re
 
+        if semantic and self.embedding_provider and self.embedding_provider.name != "skip":
+            try:
+                qvec = self.embedding_provider.embed([query])[0]
+                if qvec is not None:
+                    result = self.client.run(
+                        """
+                        ?[dist, id, project, name, node_type, level, description, status, origin,
+                          tokens_estimate, created_at, updated_at] :=
+                          ~node:embedding_idx{
+                            id, project, name, node_type, level, description, status, origin,
+                            tokens_estimate, created_at, updated_at |
+                            query: vec($q),
+                            k: $k,
+                            ef: 50,
+                            bind_distance: dist
+                          },
+                          project = $p
+                        :order +dist
+                        """,
+                        {"q": qvec, "k": k, "p": project},
+                    )
+
+                    cols = result["headers"]
+                    out: list[ScoredNode] = []
+                    for row in result["rows"]:
+                        row_map = dict(zip(cols, row))
+                        node_fields = {f: row_map[f] for f in Node.__dataclass_fields__}
+                        out.append(
+                            ScoredNode(
+                                node=Node(**node_fields),
+                                score=1.0 - float(row_map["dist"]),
+                                match_type="semantic",
+                            )
+                        )
+                    if out:
+                        return out
+            except Exception:
+                pass
+
         terms = [t.lower() for t in re.findall(r"\w+", query)]
         nodes = self.list_nodes(project)
         scored: list[ScoredNode] = []
@@ -383,6 +462,17 @@ class CozoStore:
                 scored.append(ScoredNode(node=node, score=float(score), match_type="bm25"))
         scored.sort(key=lambda s: s.score, reverse=True)
         return scored[:k]
+
+    def _embed_text(self, text: str):
+        if not self.embedding_provider or self.embedding_provider.name == "skip":
+            return None
+        try:
+            vector = self.embedding_provider.embed([text])[0]
+            if vector is None:
+                return None
+            return [float(x) for x in vector]
+        except Exception:
+            return None
 
     def assemble_context(self, project: str, leaf_id: str) -> ContextPackage:
         leaf = self.get_node(project, leaf_id)

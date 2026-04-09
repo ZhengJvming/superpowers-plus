@@ -4,7 +4,10 @@ import re
 from collections import defaultdict
 from typing import Optional, Protocol
 
-from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+try:
+    from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+except ImportError:
+    from models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
 
 
 class StoreError(Exception):
