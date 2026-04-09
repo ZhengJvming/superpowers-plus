@@ -43,6 +43,8 @@ If uninitialized:
 uv run skills/memory-management/scripts/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
+The memory store is workspace-local by default and lives under `<workspace-root>/.superpowers/pyramid-memory/`. If you are operating from a nested directory but want a different root, pass `--workspace-root <path>`.
+
 Then create the L0 root from the user's raw requirement:
 
 ```bash

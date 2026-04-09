@@ -5,7 +5,7 @@ description: Use when storing, querying, or exporting pyramid decomposition stat
 
 # Memory Management
 
-Persistent graph + decision memory for pyramid decomposition. Backed by `~/.pyramid-memory/` and accessed through `skills/memory-management/scripts/memory_cli.py`.
+Persistent graph + decision memory for pyramid decomposition. Backed by `<workspace-root>/.superpowers/pyramid-memory/` and accessed through `skills/memory-management/scripts/memory_cli.py`.
 
 ## When to Use
 
@@ -24,6 +24,8 @@ Do not use it to decompose requirements or write code. It stores and retrieves t
 ```bash
 uv run skills/memory-management/scripts/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
+
+By default the CLI resolves the workspace root from the current directory and stores data under `.superpowers/pyramid-memory/`. If you need to target a different repository root, pass `--workspace-root <path>`.
 
 ## Session Start
 

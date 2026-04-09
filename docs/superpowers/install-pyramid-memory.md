@@ -30,8 +30,15 @@ uv run <path-to-superpowers-plus>/skills/memory-management/scripts/memory_cli.py
 ```
 
 This creates:
-- `~/.pyramid-memory/config.toml`
-- `~/.pyramid-memory/data.cozo`
+- `<workspace-root>/.superpowers/pyramid-memory/config.toml`
+- `<workspace-root>/.superpowers/pyramid-memory/data.cozo`
+
+The CLI discovers `<workspace-root>` by walking up from the current directory:
+1. nearest existing `.superpowers/pyramid-memory/config.toml`
+2. otherwise the nearest Git root
+3. otherwise the current directory
+
+To target a different repository explicitly, pass `--workspace-root <path>`.
 
 ## Harness Notes
 
@@ -51,7 +58,7 @@ The app sandbox can restrict network and filesystem access. Recommended configur
 uv run <path>/memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
-Use `skip` unless `fastembed` is already cached outside the sandbox.
+Use `skip` unless `fastembed` is already cached inside the sandbox-visible workspace.
 
 ### OpenCode
 
@@ -82,7 +89,7 @@ Expected:
 ## Uninstall
 
 ```bash
-rm -rf ~/.pyramid-memory/
+rm -rf <workspace-root>/.superpowers/pyramid-memory/
 ```
 
-This deletes memory for all projects on the machine. Export first if needed.
+This deletes memory for the current workspace. Export first if needed.

@@ -14,7 +14,7 @@ def test_init_creates_config_and_db(run_cli, tmp_path):
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
-    cfg_path = tmp_path / ".pyramid-memory" / "config.toml"
+    cfg_path = tmp_path / ".superpowers" / "pyramid-memory" / "config.toml"
     assert cfg_path.exists()
     assert "demo" in cfg_path.read_text()
 

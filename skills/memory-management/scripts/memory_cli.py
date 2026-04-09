@@ -10,21 +10,27 @@
 """Pyramid Memory CLI - Milestone 1 (storage + CLI)."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import click
 
-from config import Config, default_config_path, load_config, save_config
+from config import Config, default_config_path, default_db_path, load_config, save_config
 from output import emit, emit_error
 
 VERSION = "0.1.0-m1"
+WORKSPACE_ROOT_OVERRIDE: Path | None = None
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _config_path() -> Path:
+    return default_config_path(workspace_root=WORKSPACE_ROOT_OVERRIDE)
+
+
 def _load() -> Config:
-    return load_config(default_config_path())
+    return load_config(_config_path())
 
 
 def _store():
@@ -54,8 +60,18 @@ def _project(opt_project: str | None, cfg: Config) -> str:
 
 
 @click.group()
-def cli() -> None:
+@click.option(
+    "--workspace-root",
+    type=click.Path(path_type=Path, file_okay=False, resolve_path=True),
+    help="Override detected workspace root for .superpowers/pyramid-memory.",
+)
+@click.pass_context
+def cli(ctx: click.Context, workspace_root: Path | None) -> None:
     """Pyramid Memory: graph + decision storage for AI-driven decomposition."""
+    global WORKSPACE_ROOT_OVERRIDE
+    WORKSPACE_ROOT_OVERRIDE = workspace_root
+    ctx.ensure_object(dict)
+    ctx.obj["workspace_root"] = workspace_root
 
 
 @cli.command()
@@ -71,17 +87,23 @@ def version() -> None:
     type=click.Choice(["skip", "fastembed", "voyage", "openai", "ollama"]),
     default="skip",
 )
-@click.option("--db-path", default="~/.pyramid-memory/data.cozo")
+@click.option(
+    "--db-path",
+    type=click.Path(path_type=Path, dir_okay=False, resolve_path=True),
+    default=None,
+    help="Override database file path. Defaults to <workspace-root>/.superpowers/pyramid-memory/data.cozo.",
+)
 @click.option("--non-interactive", is_flag=True, help="Skip prompts (for tests/scripts).")
-def init(project: str, embedding: str, db_path: str, non_interactive: bool) -> None:
+def init(project: str, embedding: str, db_path: Path | None, non_interactive: bool) -> None:
     """Initialize the pyramid memory store."""
+    resolved_db_path = db_path or default_db_path(workspace_root=WORKSPACE_ROOT_OVERRIDE)
     cfg = Config(
         embedding_provider=embedding,
-        db_path=db_path,
+        db_path=str(resolved_db_path),
         default_project=project,
         initialized=True,
     )
-    save_config(default_config_path(), cfg)
+    save_config(_config_path(), cfg)
 
     from cozo_store import CozoStore
 
@@ -125,8 +147,10 @@ def config_set(key: str, value: str) -> None:
     cfg = _load()
     if key not in {"embedding_provider", "default_project", "db_path"}:
         emit_error(f"unknown config key: {key}")
+    if key == "db_path":
+        value = str(Path(value).expanduser().resolve())
     setattr(cfg, key, value)
-    save_config(default_config_path(), cfg)
+    save_config(_config_path(), cfg)
     emit({"updated": {key: value}})
 
 

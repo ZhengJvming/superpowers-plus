@@ -1,10 +1,10 @@
 """Exercises every row of spec §8 fallback matrix."""
 
 import json
-import os
 from pathlib import Path
 
 import pytest
+from scripts.config import default_config_path, default_db_path
 
 
 @pytest.fixture
@@ -69,9 +69,8 @@ def test_row4_provider_failure_falls_back_to_bm25(initialized_skip):
     assert payload["data"]["matches"][0]["match_type"] == "bm25"
 
 
-def test_row5_corrupted_db_reports_error(initialized_skip):
-    home = Path(os.environ["HOME"])
-    db_path = home / ".pyramid-memory" / "data.cozo"
+def test_row5_corrupted_db_reports_error(initialized_skip, tmp_path):
+    db_path = default_db_path(cwd=tmp_path)
     db_path.write_bytes(b"corrupted db payload")
     r = initialized_skip("node", "list")
     if r.stdout.strip():
@@ -111,9 +110,9 @@ def test_row7_no_network_uses_skip(run_cli, monkeypatch):
     assert json.loads(r.stdout)["ok"] is True
 
 
-def test_row8_missing_project_fails_fast(run_cli):
+def test_row8_missing_project_fails_fast(run_cli, tmp_path):
     run_cli("init", "--project", "demo", "--embedding", "skip", "--non-interactive")
-    cfg_path = Path(os.environ["HOME"]).expanduser() / ".pyramid-memory" / "config.toml"
+    cfg_path = default_config_path(cwd=tmp_path)
     text = cfg_path.read_text()
     cfg_path.write_text(text.replace('default_project = "demo"', ""))
     r = run_cli("node", "list")

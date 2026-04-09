@@ -32,14 +32,15 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def run_cli(tmp_path, monkeypatch):
-    """Run memory_cli.py with HOME redirected to tmp_path."""
+    """Run memory_cli.py with an isolated workspace rooted at tmp_path."""
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    def _run(*args: str):
+    def _run(*args: str, cwd: Path | None = None):
         return subprocess.run(
             ["uv", "run", str(SCRIPTS / "memory_cli.py"), *args],
             capture_output=True,
             text=True,
+            cwd=str(cwd or tmp_path),
             env={**os.environ, "HOME": str(tmp_path)},
         )
 
