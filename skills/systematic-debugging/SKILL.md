@@ -119,6 +119,23 @@ You MUST complete each phase before proceeding to the next.
    - Keep tracing up until you find the source
    - Fix at source, not at symptom
 
+6. **Cross-Module Dependency Trace**
+
+   When the issue crosses module boundaries and pyramid memory exists for the project:
+   - use `cross-module-tracing.md`
+   - query upstream and downstream impact
+   - identify whether the failing module is the source or only the first visible symptom
+
+## Debugging Memory Protocol
+
+Before and during debugging:
+- run `scratch list` and `memory recall` if this project already has pyramid memory
+- record active findings in scratchpad
+- avoid repeating rejected hypotheses
+
+When the issue is solved:
+- promote durable findings to decisions or interfaces
+
 ### Phase 2: Pattern Analysis
 
 **Find the pattern before fixing:**
@@ -150,6 +167,7 @@ You MUST complete each phase before proceeding to the next.
    - State clearly: "I think X is the root cause because Y"
    - Write it down
    - Be specific, not vague
+   - Use `hypothesis-tracking.md` to record it in scratchpad
 
 2. **Test Minimally**
    - Make the SMALLEST possible change to test hypothesis
@@ -210,7 +228,17 @@ You MUST complete each phase before proceeding to the next.
 
    **Discuss with your human partner before attempting more fixes**
 
+   Before escalating, write a `must_persist` scratch summary of:
+   - hypotheses tried
+   - evidence gathered
+   - why the architecture is now suspect
+
    This is NOT a failed hypothesis - this is a wrong architecture.
+
+   Escalation paths:
+   - pause and discuss
+   - route to `brainstorming` when the next step is redesign
+   - route to `pyramid-decomposition` when the next step is structural decomposition
 
 ## Red Flags - STOP and Follow Process
 
@@ -282,10 +310,15 @@ These techniques are part of systematic debugging and available in this director
 - **`root-cause-tracing.md`** - Trace bugs backward through call stack to find original trigger
 - **`defense-in-depth.md`** - Add validation at multiple layers after finding root cause
 - **`condition-based-waiting.md`** - Replace arbitrary timeouts with condition polling
+- **`hypothesis-tracking.md`** - Record, reject, and promote hypotheses systematically
+- **`cross-module-tracing.md`** - Trace faults across dependency boundaries
 
 **Related skills:**
 - **superpowers:test-driven-development** - For creating failing test case (Phase 4, Step 1)
 - **superpowers:verification-before-completion** - Verify fix worked before claiming success
+- **superpowers:brainstorming** - When debugging reveals a redesign problem
+- **superpowers:pyramid-decomposition** - When debugging reveals a structural decomposition problem
+- **superpowers:dispatching-parallel-agents** - When multiple independent module investigations can run in parallel
 
 ## Real-World Impact
 

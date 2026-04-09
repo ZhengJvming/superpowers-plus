@@ -7,7 +7,7 @@ description: Use when the user has a fuzzy or oversized engineering requirement 
 
 Turn a fuzzy large requirement into a confirmed pyramid of branches and leaves. Every split is stored as a decision. Every leaf must pass five independence criteria before implementation planning.
 
-See [decomposition-guide.md](/Users/jimmy/coding/AI/straw/skills-explore/superpowers-plus/skills/pyramid-decomposition/decomposition-guide.md) for the criteria reference.
+See `decomposition-guide.md` in this directory for the criteria reference.
 
 **Core principle:** breadth-first decomposition only. Never recurse depth-first through the tree.
 
@@ -185,6 +185,14 @@ If this is a change to a real codebase rather than greenfield design:
 - attach `file-ref` entries for the exact boundary files
 
 Do not ask the user whether to explore. Exploration is automatic preparation.
+
+## Inbound from Debugging Escalation
+
+If this decomposition starts from `systematic-debugging`:
+- read scratchpad findings first
+- use the debugging summary as the initial requirement
+- set the root framing to a structural fix, not a greenfield feature
+- if debugging already refreshed the codebase map, do not repeat exploration unless freshness is stale again
 
 ## Non-Negotiables
 
