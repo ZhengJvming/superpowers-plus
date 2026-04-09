@@ -81,7 +81,7 @@ All access goes through a `MemoryStore` Protocol in `db.py`. CozoStore is the de
   id: String,
   project: String,
   name: String,
-  node_type: String,    -- root | branch | leaf
+  node_type: String,    -- root | branch | leaf | existing_module | change_root | change_branch | change_leaf
   level: Int,           -- 0 = L0, increases downward
   description: String,
   status: String,       -- draft | confirmed | in_progress | done | failed
@@ -125,6 +125,17 @@ All access goes through a `MemoryStore` Protocol in `db.py`. CozoStore is the de
   created_at: String
 }
 
+:create file_ref {
+  id: String,
+  node_id: String,
+  path: String,            -- relative to project root
+  lines: String,           -- "45-120" or "*" for whole file
+  role: String,            -- modify | read | test | create
+  content_hash: String,    -- sha256 of file content at scan time
+  scanned_at: String,
+  status: String,          -- current | stale | deleted
+}
+
 :create config {
   key: String,
   value: String
@@ -160,12 +171,13 @@ Stored *outside* any project directory so the same memory works across git check
 # requires-python = ">=3.10"
 # dependencies = [
 #   "pycozo[embedded]>=0.7",
+#   "click>=8.1",
 #   "tomli>=2.0; python_version<'3.11'",
-#   "voyageai>=0.3",
-#   "fastembed>=0.4",
 # ]
 # ///
 ```
+
+**Embedding providers are lazy-imported, NOT listed in PEP 723 dependencies.** `fastembed` (~130MB) and `voyageai` are only installed on demand when the user runs `memory_cli.py init --embedding fastembed` (which triggers a one-time `uv pip install fastembed` into the cache). This keeps the base CLI lightweight (~10MB) for users who choose `skip`.
 
 Run as `uv run memory_cli.py <command>`. First call downloads + caches deps to an isolated environment; later calls are instant.
 
@@ -264,7 +276,12 @@ Phase 0: Initialize
   - memory_cli.py init --project <name> # ensure namespace exists
   - node create --level 0 --name "..." --description "<raw requirement>"
 
-Phase 1: Recursive decomposition (per node N)
+Phase 1: BFS decomposition (level by level)
+  Process one level at a time. When processing node N at level L:
+  Context loaded: N full detail + ancestor chain as summaries + same-level sibling summaries + parent's split decision.
+  DO NOT load: full subtree of other branches, decisions from non-ancestors.
+  
+  For each node N at the current level:
   1. Apply 5 independence criteria → leaf or branch?
   2. If branch:
      a. LLM proposes 3-5 children (pure reasoning, no CLI)
@@ -272,8 +289,10 @@ Phase 1: Recursive decomposition (per node N)
      c. Confirm split with user (brainstorming-style micro-questions)
      d. node create + edge add --type hierarchy (per child)
      e. decision store --node N --question "..." --chosen "..." --reasoning "..."
-     f. Recurse into each child
-  3. If leaf: node update --status leaf
+  3. If leaf: node update --status leaf --criteria-confirmed
+  
+  After ALL nodes at level L are processed, advance to level L+1.
+  Use `node list --level L --summary` to get sibling overviews without full detail.
 
 Phase 2: Dependency pass
   - Walk leaves, identify cross-branch deps → edge add --type dependency
@@ -351,7 +370,7 @@ SKILL.md instructs the LLM: on first invocation, run `memory config show`. If ou
 4. Every command returns structured JSON → degraded paths never crash flows.
 5. `uv` is the **only** non-stdlib dependency outside the PEP 723 cache.
 6. LLM is orchestrator, CLI is executor → SKILL.md never embeds business logic.
-7. Code-context tooling (Serena, LSP) is *separate* from this decision-memory layer — do not conflate.
+7. Code-context tooling (Serena, LSP) is *separate* from this decision-memory layer. However, the memory layer MAY store **pointers** to code (file paths + line ranges via `file-ref`) without storing code *content*. The distinction: memory stores "this leaf affects `src/payment/service.py:45-120`" (a pointer); Serena/LSP stores/analyzes the actual code symbols and AST. Do not conflate the two.
 
 ---
 
@@ -361,7 +380,7 @@ SKILL.md instructs the LLM: on first invocation, run `memory config show`. If ou
 - ~~**HNSW filter on `status != 'failed'`**: requires verifying CozoDB filter syntax in current release.~~ Verified 2026-04-08 with pycozo 0.7.6: `filter` clause accepted and query excluded `status='failed'` rows.
 - ~~**Embedding dimension mismatch (`<F32; 1024>` vs `bge-small-en-v1.5`)~~ Resolved 2026-04-08: use `dim=384` to match default `fastembed` model (`BAAI/bge-small-en-v1.5`). Future cloud-provider migration can add explicit reindex/migration tooling.
 - ~~**Dependency context leakage in `memory context`**~~ Resolved 2026-04-09: dependency projection is restricted to `{id, name, status}` so leaf packages only receive public dependency identity, not full internal descriptions.
-- **`tokens_estimate`**: who maintains it? Initial plan: LLM updates on `node create` based on description length × heuristic; revisit if drift hurts context-assembly accuracy.
+- **`tokens_estimate`**: who maintains it? Initial plan: LLM updates on `node create` based on description length × heuristic. M3 adds `memory recompute-tokens --node X` to recalculate from actual `assemble_context` output, and the leaf-criteria check (criterion 4) always uses the live-computed value, not the stored one.
 - **Decision dedup**: if the same decision recurs across projects, do we cross-link or duplicate? Initial plan: scope to project, allow `recall --all-projects` opt-in.
 - **Concurrent access**: two harnesses writing simultaneously. CozoDB embedded mode is single-writer; need a file lock or accept last-write-wins. Initial plan: file lock with 5s timeout, fail-fast on contention.
 
@@ -370,10 +389,12 @@ SKILL.md instructs the LLM: on first invocation, run `memory config show`. If ou
 ## 11. Out of Scope (Explicitly)
 
 - Real-time collaboration / team-shared memory (single user, single machine for v1).
-- Code symbol / AST indexing (delegated to Serena or similar).
+- Code symbol / AST indexing (delegated to Serena or similar). Memory stores file *pointers*, not AST.
 - Web UI / visualization (CLI + JSON only; users can build viz on top).
 - Auto-decomposition without user confirmation (always interactive in v1).
-- Migration from existing systems (greenfield).
+
+**Formerly out of scope, now planned:**
+- ~~Migration from existing systems (greenfield).~~ Addressed in M4: `codebase-exploration` skill + `file-ref` data model + incremental refresh enables working on existing codebases. See §11.5 M3/M4.
 
 ---
 
@@ -420,6 +441,76 @@ This spec is delivered in **two sequential plans**, each producing working, inde
 - The skill enforces 5 independence criteria at leaf-marking time (rejects via `memory validate`)
 - Cross-harness install verified on at least 3 harnesses
 
+### Milestone 3 — BFS Context Control (Plan 3)
+**Plan file**: `docs/superpowers/plans/2026-04-09-pyramid-memory-m3-bfs-context.md`
+
+**Problem solved**: Decomposition phase itself causes context overflow with DFS recursion. For a 5-level pyramid with 4 children per branch, level 4 processing accumulates ~20 nodes of full detail — the same context explosion the pyramid was designed to prevent.
+
+**Scope**:
+- CLI extension: `node list --level L` filter + `--summary` mode (returns `{id, name, description, status, level}` only)
+- CLI extension: `query ancestors --summary` (ancestor chain as one-liners, no decisions/interfaces)
+- CLI: `memory recompute-tokens` command (recompute token estimate from actual `assemble_context` output)
+- SKILL.md rewrite: Phase 1 DFS → BFS level-by-level with explicit context budget rule
+- Config: `[display] tree_format = ascii|mermaid` — harness-appropriate default set at init time
+- CLI: `memory tree [--format ascii|mermaid] [--root <id>] [--show-deps]` — mechanical tree rendering, zero LLM tokens
+- Tree renderers: ASCII (terminal-friendly, box-drawing chars) + Mermaid (renders in GitHub, Obsidian, IDE chat panels)
+- Phase 3 hand-off: uses `memory tree` instead of LLM-formatted output; auto-selects format from config
+- Eval: verify decomposition of a 4-level pyramid stays under 2k tokens of context at each step
+
+**Exit criteria**:
+- A 4-level, 30-node pyramid can be fully decomposed without the LLM loading >3k tokens of pyramid state at any single step
+- `node list --level 2 --summary` returns in <100ms on a 1000-node DB
+- `memory tree` produces valid ASCII with tree connectors and status indicators
+- `memory tree --format mermaid` produces valid Mermaid syntax with node-type coloring and optional dependency edges
+- Format defaults to config `[display] tree_format`; terminal harnesses default `ascii`, IDE harnesses default `mermaid`
+
+### Milestone 4 — Existing Project Support (Plan 4)
+**Plan file**: `docs/superpowers/plans/2026-04-09-pyramid-memory-m4-existing-projects.md`
+
+**Problem solved**: The system only works for greenfield projects. Real users mostly modify existing codebases. They need the LLM to (1) automatically explore unfamiliar code, (2) keep memory fresh as code changes, (3) scope changes via impact analysis, and (4) decompose *changes* (not the whole system). All of this must be auto-triggered by the LLM, not user-initiated.
+
+**Scope**:
+- Data model extension: `file_ref` relation (path, lines, role, content_hash, status)
+- Data model extension: `node_type` expanded with `existing_module | change_root | change_branch | change_leaf`
+- CLI: `file-ref add/list/check` commands
+- CLI: `memory freshness` (compare `last_scan_commit` vs `git HEAD`, report stale nodes)
+- CLI: `memory refresh` (git-diff based incremental stale-marking, <1s for typical diffs)
+- Config extension: `[scan] last_commit`, `project_root`
+- New skill: `codebase-exploration` — auto-triggered by LLM when context insufficient; scans modules, stores as `existing_module` nodes with `file-ref`
+- New capability (embedded in pyramid-decomposition): impact-analysis phase before decomposition on existing projects
+- LLM auto-trigger protocol: every skill checks `memory freshness` at session start; `memory recall` miss triggers local exploration; no user-initiated triggers required
+- `assemble_context` extended: includes `file_refs` with stale warnings so subagents know exactly which files to read
+- Lazy validation: stale `file_ref` returns `status: stale` + `warning`; LLM re-reads file and updates hash on access
+
+**Exit criteria**:
+- An LLM can start a session on an unfamiliar codebase, automatically explore it (without user saying "explore this"), store findings, and then decompose a modification requirement using the stored code map
+- `memory refresh` on a repo with 50 changed files completes in <2s
+- After `git commit`, stale detection flags the affected nodes within the next LLM operation
+- A `change_leaf`'s `memory context` includes `file_refs` pointing to the exact files/lines to modify
+
+### Milestone 5 — Session Context Management (Plan 5)
+**Plan file**: `docs/superpowers/plans/2026-04-09-pyramid-memory-m5-session-context.md`
+
+**Problem solved**: During a conversation the LLM discovers valuable information through tool calls (code structure, user constraints, API behavior). This information is buried in conversation history and lost when context is compacted. Meanwhile, growing context degrades LLM attention, and naive context manipulation breaks prefix cache. The LLM needs a structured way to capture, classify, and recall in-session findings while keeping context lean and cache-friendly.
+
+**Scope**:
+- Data model: `ScratchEntry` dataclass (`key, value, category, ttl, created_at`)
+- CLI: `memory scratch write --key K --value V --ttl session|persist --category <cat>` — LLM writes findings during conversation
+- CLI: `memory scratch list [--category]` — read current session scratchpad
+- CLI: `memory scratch promote --key K --node <node-id> [--as decision|interface]` — move session finding to persistent pyramid memory
+- CLI: `memory scratch clear [--ttl session]` — clean up expired entries
+- Storage: JSON file `.superpowers/pyramid-memory/scratchpad.json` (not CozoDB — lightweight, fast, disposable)
+- Value classification criteria (in SKILL.md): mechanical rules for MUST-PERSIST / SESSION-KEEP / DISCARD based on signal words and information type
+- Pre-decision recall gate (in SKILL.md): before `node create`, `decision store`, or architecture answers → `scratch list` + `memory recall` + `query ancestors --summary` mandatory
+- Context management guidance: when to write scratch (>15 tool calls → flush important findings), anti-patterns (never reload full pyramid mid-session, never inject dynamic content into system prompt prefix)
+- Cache-friendly design rules: append-only context growth, stable prefix (system prompt + skills + pyramid context loaded once), scratchpad reads at context tail
+
+**Exit criteria**:
+- After context compaction, the LLM can `scratch list` and recover all MUST-PERSIST and SESSION-KEEP findings without re-executing tool calls
+- Pre-decision recall gate catches ≥1 relevant prior finding in a 20-turn conversation with 3+ topic switches
+- `scratch write` + `scratch list` round-trip in <50ms
+- Prefix cache hit rate remains >80% across a 30-turn session (measured by counting stable-prefix turns vs total turns)
+
 ---
 
 ## 12. Acceptance Criteria
@@ -429,7 +520,7 @@ A successful v1 ships when **all three core problems are demonstrably solved**:
 ### Problem #1: 上下文崩溃
 1. `memory context --node <leaf>` returns a JSON package ≤ 8k tokens that lets a fresh subagent implement the leaf without re-reading the pyramid or any project files outside its declared deps.
 2. The same `~/.pyramid-memory/` is readable by Claude Code, Codex CLI, and one other harness without modification — proving cross-session persistence works across tools.
-3. A pyramid with ≥ 100 leaves can be queried without loading the full graph into the LLM context (per-call queries only fetch local neighborhoods).
+3. A pyramid with ≥ 100 leaves can be queried without loading the full graph into the LLM context (per-call queries only fetch local neighborhoods). Stretch target: ≥ 1000 leaves with sub-second CLI response times (real-world large projects may reach this scale).
 
 ### Problem #2: 需求描述不清
 4. `pyramid-decomposition` skill can take a 1-paragraph fuzzy requirement and, through interactive Q&A, produce a confirmed pyramid where every leaf has a one-sentence description, typed interface, and linked decisions — **without the user ever writing a spec document themselves**.
