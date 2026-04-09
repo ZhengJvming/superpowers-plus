@@ -27,6 +27,9 @@ If the spec covers multiple independent subsystems, it should have been broken i
 If the plan is being written for a leaf from `pyramid-decomposition`, fetch its context package first:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
 ```
 

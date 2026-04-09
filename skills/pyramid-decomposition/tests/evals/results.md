@@ -27,8 +27,8 @@
 
 ## AC #2 — cross-harness shared memory
 
-- Tested harnesses: simulated fresh shell with `unset PYTHONPATH` and shared `HOME=/tmp/pyramid-evals`
-- Shared `~/.pyramid-memory/`: confirmed within the simulated shell boundary
+- Tested harnesses: simulated fresh shell with `unset PYTHONPATH` and workspace-local store rooted in `/tmp/pyramid-evals/.superpowers/pyramid-memory/`
+- Shared workspace-local memory: confirmed within the simulated shell boundary
 - Status: PASS (fresh-shell simulation)
 
 ## AC #4 — fuzzy requirement -> confirmed pyramid (no user-written spec)

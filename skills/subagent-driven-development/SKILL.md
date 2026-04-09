@@ -39,9 +39,12 @@ digraph when_to_use {
 
 ## Context Loading from Pyramid Memory
 
-If the implementation plan came from `pyramid-decomposition`, each task may map to a leaf in `~/.pyramid-memory/`. Before dispatching the implementer subagent, fetch that leaf's package:
+If the implementation plan came from `pyramid-decomposition`, each task may map to a leaf in the workspace-local pyramid store under `<workspace-root>/.superpowers/pyramid-memory/`. Before dispatching the implementer subagent, fetch that leaf's package:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
 ```
 
@@ -55,6 +58,9 @@ Pass the returned JSON into the subagent prompt as its context block. Do not pas
 After the leaf is implemented, mark it done:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run skills/memory-management/scripts/memory_cli.py node update --id <leaf-id> --status done
 ```
 
