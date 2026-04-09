@@ -5,68 +5,65 @@ description: Use when the user has a fuzzy or oversized engineering requirement 
 
 # Pyramid Decomposition
 
-Turn a fuzzy large requirement into a confirmed pyramid of branches and leaves. Every split is stored as a decision. Every leaf must pass five independence criteria before it can be marked complete enough for implementation planning.
+Turn a fuzzy large requirement into a confirmed pyramid of branches and leaves. Every split is stored as a decision. Every leaf must pass five independence criteria before implementation planning.
 
-See [decomposition-guide.md](/Users/jimmy/coding/AI/straw/skills-explore/superpowers-plus/skills/pyramid-decomposition/decomposition-guide.md) for the full criteria reference.
+See [decomposition-guide.md](/Users/jimmy/coding/AI/straw/skills-explore/superpowers-plus/skills/pyramid-decomposition/decomposition-guide.md) for the criteria reference.
 
-## When to Use
+**Core principle:** breadth-first decomposition only. Never recurse depth-first through the tree.
 
-Use this skill when:
+## Escalation Gate
+
+Use this skill when any of these are true:
 - the requirement spans multiple subsystems or boundaries
 - the user cannot provide a clean implementation spec up front
-- a single context window cannot safely hold the whole design
+- one normal spec/plan cycle will not safely hold the whole problem
+- the task needs persistent structural mapping of an existing codebase
 
-Do not use it for:
-- single-file features
-- tightly scoped bug fixes
-- already-finished specs that are ready for `writing-plans`
+Do not use it when all of these are true:
+- one clear outcome
+- one bounded subsystem
+- no persistent decomposition state needed
+- a normal `brainstorming -> writing-plans -> execution` path is sufficient
 
-## Prerequisites
+If the task is simple, stay on the normal Superpowers workflow. Do not decompose it just because pyramid exists.
 
-1. `memory-management` must be available.
-2. `uv` must be installed.
-3. Run all `uv` commands in this skill with workspace-local cache and the Tsinghua mirror:
+## Launcher
+
+Use the memory launcher from the sibling skill directory:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run ...
+python3 ../memory-management/scripts/run_memory_cli.py ...
 ```
 
-4. `memory config show` must report `initialized: true`, or you initialize the store first.
+## Minimal Start
 
-## Workflow
-
-### Phase 0: Initialize
-
-Run:
+1. Check memory state:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py config show
+python3 ../memory-management/scripts/run_memory_cli.py config show
 ```
 
-If uninitialized:
+2. If uninitialized:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py init --project <project-name> --embedding skip --non-interactive
+python3 ../memory-management/scripts/run_memory_cli.py init --project <project-name> --embedding skip --non-interactive
 ```
 
-The memory store is workspace-local by default and lives under `<workspace-root>/.superpowers/pyramid-memory/`. If you are operating from a nested directory but want a different root, pass `--workspace-root <path>`.
-
-Then create the L0 root from the user's raw requirement:
+3. If this is an existing-project change:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py node create \
+python3 ../memory-management/scripts/run_memory_cli.py memory freshness
+```
+
+If freshness is `stale`, run `memory refresh`.
+If freshness is `unknown`, trigger `codebase-exploration` before decomposition.
+
+## Phase 0: Root Node
+
+Create the level-0 root from the user's raw requirement:
+
+```bash
+python3 ../memory-management/scripts/run_memory_cli.py node create \
   --id root \
   --name "<short-title>" \
   --type root \
@@ -75,200 +72,119 @@ uv run skills/memory-management/scripts/memory_cli.py node create \
   --origin user_stated
 ```
 
-### Phase 0.5: Existing Project Impact Analysis
+## Phase 1: BFS Decomposition
 
-If the user is modifying an existing codebase rather than designing a greenfield system:
-
-1. Run `memory freshness`.
-2. If freshness is `stale`, run `memory refresh`.
-3. If freshness is `unknown` or recall returns nothing useful, activate `codebase-exploration`.
-4. Create or reuse `existing_module` / `change_*` nodes to map the code area before decomposition.
-5. Add `file-ref` entries for the concrete files that define the current boundary.
-
-Do not ask the user whether to explore. Existing-project exploration is an automatic preparation step.
-
-### Phase 1: BFS Decomposition (level by level)
-
-**Core rule: process one level at a time, never recurse depth-first.**
-
-When processing node `N` at level `L`, load only:
-- `node get --id N`
-- `query ancestors --id N --summary`
-- `node list --level L --summary`
-- the parent's split decision
-- optional `memory recall --query "<N.description>" --k 3`
-- current scratchpad findings from `scratch list`
+For the current level, load only:
+- `node get --id <node>`
+- `query ancestors --id <node> --summary`
+- `node list --level <level> --summary`
+- the parent split decision
+- optional `memory recall --query "<node-description>" --k 3`
+- current scratch entries
 
 Do not load:
 - the entire subtree
 - non-ancestor decisions
-- full details for sibling nodes
-- full pyramid state mid-decomposition
+- full sibling detail
+- the whole pyramid mid-decomposition
 
-#### BFS loop
+### Per-node loop
 
-1. `node list --level <current-level>` to get pending nodes.
-2. For each node at that level:
-   - run the pre-decision recall gate:
+Before each split decision:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py scratch list
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<what you are about to decide>" --k 3
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <node-id> --summary
+python3 ../memory-management/scripts/run_memory_cli.py scratch list
+python3 ../memory-management/scripts/run_memory_cli.py memory recall --query "<what you are about to decide>" --k 3
+python3 ../memory-management/scripts/run_memory_cli.py query ancestors --id <node-id> --summary
 ```
 
-   - decide whether the node can already be a leaf
-   - if not, propose 3-5 children along natural boundaries
-   - confirm the split with focused micro-questions
-   - create children and a split decision
-3. After finishing the whole level, advance to the next level.
+Then:
+1. Decide whether the node can already be a leaf.
+2. If not, propose 3-5 children along natural boundaries.
+3. Confirm the split with focused micro-questions.
+4. Create children.
+5. Store the split decision on the parent.
 
 For each accepted child:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py node create \
-  --id <child-id> \
-  --name "<child-name>" \
-  --type branch \
-  --level <parent-level + 1> \
-  --description "<one-sentence description>" \
-  --origin <user_stated|skill_inferred>
-
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py edge add \
-  --kind hierarchy \
-  --from <parent-id> \
-  --to <child-id>
+python3 ../memory-management/scripts/run_memory_cli.py node create ...
+python3 ../memory-management/scripts/run_memory_cli.py edge add --kind hierarchy --from <parent-id> --to <child-id>
 ```
 
-Record the split decision on the parent:
+Record the split decision:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py decision store \
-  --id "d-split-<node-id>" \
-  --node <node-id> \
-  --question "How should <node-name> be decomposed?" \
-  --options '["chosen-split", "alt-1", "alt-2"]' \
-  --chosen "<chosen-split>" \
-  --reasoning "<why this split>" \
-  --tradeoffs "<tradeoffs>"
+python3 ../memory-management/scripts/run_memory_cli.py decision store ...
 ```
 
-Do not recurse into the children immediately. They are processed when the BFS loop advances.
+Do not recurse into the new children immediately. Finish the whole level first.
 
-### Phase 1.5: Leaf Qualification
+## Phase 1.5: Leaf Qualification
 
 Before marking a node as `leaf`:
 
 1. Publish at least one interface:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py interface add \
-  --id "iface-<leaf-id>" \
-  --node <leaf-id> \
-  --name "<name>" \
-  --description "<what it exposes>" \
-  --spec "<signature, endpoint, event, or contract>"
+python3 ../memory-management/scripts/run_memory_cli.py interface add ...
 ```
 
 2. Run the mechanical criteria check:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py memory check-leaf-criteria --node <leaf-id>
+python3 ../memory-management/scripts/run_memory_cli.py memory check-leaf-criteria --node <leaf-id>
 ```
 
-3. Perform the two LLM-only checks:
+3. Personally verify:
 - single responsibility
 - independent testability
 
 4. If all five pass:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py node update \
-  --id <leaf-id> \
-  --status leaf \
-  --criteria-confirmed
+python3 ../memory-management/scripts/run_memory_cli.py node update --id <leaf-id> --status leaf --criteria-confirmed
 ```
 
-If any criterion fails, the node is still a branch. Split again or stabilize its dependencies first.
+If any criterion fails, the node remains a branch. Split again or stabilize its dependencies first.
 
-### Phase 2: Dependency Pass
+## Phase 2: Dependency Pass
 
-After leaves exist, add cross-leaf dependencies explicitly:
+After leaves exist:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py edge add --kind dependency --from <leaf-a> --to <leaf-b>
+python3 ../memory-management/scripts/run_memory_cli.py edge add --kind dependency --from <leaf-a> --to <leaf-b>
+python3 ../memory-management/scripts/run_memory_cli.py query cycles
 ```
 
-Then verify no cycles:
+If a cycle appears, remove the weakest dependency or extract a shared abstraction into a new node.
 
-```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py query cycles
-```
-
-If a cycle appears, remove the weakest dependency or extract the shared abstraction into a new node.
-
-### Phase 3: Validate and Hand Off
+## Phase 3: Validate and Hand Off
 
 Run:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py memory validate
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py memory stats
+python3 ../memory-management/scripts/run_memory_cli.py memory validate
+python3 ../memory-management/scripts/run_memory_cli.py memory stats
 ```
-
-Expected:
-- validation passes
-- the skill-inferred ratio is meaningfully non-zero; if it is too low, you likely failed to surface hidden structure
 
 When the pyramid is ready, hand off one leaf at a time:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
+python3 ../memory-management/scripts/run_memory_cli.py memory context --node <leaf-id>
 ```
 
-Pass only that package into `subagent-driven-development` or `writing-plans`. Do not dump the full pyramid into the next agent.
+Pass only that package into `writing-plans` or `subagent-driven-development`. Do not dump the full pyramid into the next agent.
+
+## Existing Project Rule
+
+If this is a change to a real codebase rather than greenfield design:
+- run freshness first
+- trigger `codebase-exploration` when freshness is `unknown`
+- create `existing_module` or `change_*` nodes before deep splitting
+- attach `file-ref` entries for the exact boundary files
+
+Do not ask the user whether to explore. Exploration is automatic preparation.
 
 ## Non-Negotiables
 
@@ -287,4 +203,6 @@ At the end, summarize:
 - skill-inferred ratio
 - whether validation passed
 
-Then ask whether to pause for review or hand off to implementation planning.
+Then offer exactly two next steps:
+1. pause for review
+2. hand off a leaf into implementation planning

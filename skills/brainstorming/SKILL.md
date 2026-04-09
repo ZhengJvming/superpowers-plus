@@ -42,6 +42,21 @@ Typical triggers:
 
 `pyramid-decomposition` is the correct escalation path when the core problem is structural decomposition, not local design clarity.
 
+### Escalation Rubric
+
+Escalate immediately when any of these are true:
+- the task naturally breaks into multiple independently implementable units
+- the user intent is too fuzzy for one clean implementation plan
+- the problem spans multiple subsystems or cross-team style boundaries
+- an existing codebase must be structurally mapped before safe planning
+
+Do not escalate when all of these are true:
+- one clear outcome
+- one bounded subsystem
+- one normal spec/plan cycle is enough
+
+If escalation is required, stop local-detail brainstorming and switch into `pyramid-decomposition`.
+
 ## Process Flow
 
 ```dot
