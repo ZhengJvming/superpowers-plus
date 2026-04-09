@@ -1,10 +1,20 @@
 # Pyramid Memory Skills Installation Guide
 
-These instructions install the two M2 skills:
+This installs the two pyramid skills:
 - `pyramid-decomposition`
 - `memory-management`
 
-Both rely on the embedded Python CLI at `skills/memory-management/scripts/memory_cli.py`.
+Use the launcher, not the raw CLI:
+
+```bash
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py ...
+```
+
+The launcher already does the two things that matter in sandboxed harnesses:
+- pins `UV_CACHE_DIR` to `<workspace-root>/.superpowers/uv-cache/`
+- defaults `UV_INDEX_URL` to the Tsinghua mirror
+
+You should not need to type a long `UV_CACHE_DIR=... uv run ...` prefix during normal use.
 
 ## Hard Dependency: `uv`
 
@@ -20,86 +30,62 @@ Verify:
 uv --version
 ```
 
-## Standard `uv` Environment
+## Skill Root
 
-Use workspace-local cache plus the Tsinghua mirror for every `uv` invocation in this guide:
+`<skills-root>` means the installed `superpowers-plus/skills` directory for your harness.
 
-```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run ...
-```
+Typical locations:
+- Claude Code: `~/.claude/plugins/superpowers-plus/skills/`
+- Codex CLI: `~/.codex/skills/superpowers-plus/skills/`
+- Codex App: `~/.codex/skills/superpowers-plus/skills/`
 
-This avoids sandbox failures caused by default user-level cache directories such as `~/.cache/uv`.
+If you install or update the symlink, start a new agent session before testing. Skill discovery usually happens at session start, not continuously.
 
 ## One-Time Initialization
 
-After `superpowers-plus` is installed for your harness, initialize the shared store once:
+From the target workspace, run:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run <path-to-superpowers-plus>/skills/memory-management/scripts/memory_cli.py \
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py \
   init --project <project-name> --embedding skip --non-interactive
 ```
 
 This creates:
 - `<workspace-root>/.superpowers/pyramid-memory/config.toml`
 - `<workspace-root>/.superpowers/pyramid-memory/data.cozo`
+- `<workspace-root>/.superpowers/uv-cache/`
 
-The CLI discovers `<workspace-root>` by walking up from the current directory:
+Workspace root is discovered by walking up from the current directory:
 1. nearest existing `.superpowers/pyramid-memory/config.toml`
 2. otherwise the nearest Git root
 3. otherwise the current directory
 
-To target a different repository explicitly, pass `--workspace-root <path>`.
-
-## Harness Notes
-
-### Claude Code
-
-Skills are typically loaded from `~/.claude/plugins/superpowers-plus/skills/`.
-
-### Codex CLI
-
-Skills are typically loaded from `~/.codex/skills/superpowers-plus/skills/` or a symlinked equivalent.
-
-### Codex App
-
-The app sandbox can restrict network and filesystem access. Recommended configuration:
+To target a different repository explicitly:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run <path>/memory_cli.py init --project <project-name> --embedding skip --non-interactive
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py \
+  --workspace-root /abs/path/to/repo \
+  init --project <project-name> --embedding skip --non-interactive
 ```
 
-Use `skip` unless `fastembed` is already cached inside the sandbox-visible workspace.
+Use `skip` unless `fastembed` is already available and you explicitly want semantic recall enabled.
 
-### OpenCode
+## `.gitignore`
 
-Make sure `uv` is in the shell `PATH` inherited by OpenCode.
+Do not commit runtime state. Add this in each target workspace:
 
-### Cursor / Windsurf
+```bash
+printf '\n.superpowers/\n' >> .gitignore
+```
 
-These do not have strong native skill loading. Reuse the markdown instructions manually and invoke the CLI directly.
-
-### Gemini CLI / Copilot CLI
-
-Use the harness-specific skill loading path, but the CLI invocation stays the same.
+`pyramid-memory` stores the database and config there, and the launcher also puts the `uv` cache there.
 
 ## Verification
 
 After init:
 
 ```bash
-UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
-UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-UV_INDEX_STRATEGY=unsafe-best-match \
-uv run <path>/memory_cli.py memory doctor
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py memory doctor
 ```
 
 Expected:
@@ -108,10 +94,49 @@ Expected:
 {"ok": true, "data": {"initialized": true, "db_ok": true, "embedding_provider": "skip", "embedding_ok": true, "notes": []}}
 ```
 
+## Fresh Workspace Smoke Test
+
+Use a clean repo, not the `superpowers-plus` source checkout:
+
+```bash
+mkdir -p /tmp/pyramid-skill-smoke
+cd /tmp/pyramid-skill-smoke
+git init
+printf '\n.superpowers/\n' >> .gitignore
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py \
+  init --project smoke --embedding skip --non-interactive
+python3 <skills-root>/memory-management/scripts/run_memory_cli.py memory doctor
+find .superpowers -maxdepth 3 -type f | sort
+```
+
+Pass criteria:
+- `.superpowers/pyramid-memory/config.toml` exists
+- `.superpowers/pyramid-memory/data.cozo` exists
+- `.superpowers/uv-cache/` exists
+- no write happens to `~/.pyramid-memory/`
+
+## Harness Notes
+
+### Codex App
+
+The launcher is the recommended entrypoint. It keeps both memory state and the `uv` cache inside the current workspace, which avoids common sandbox failures.
+
+### OpenCode
+
+Make sure `uv` is in the shell `PATH` inherited by OpenCode.
+
+### Cursor / Windsurf
+
+These do not have strong native skill loading. Reuse the markdown instructions manually and invoke the launcher directly.
+
+### Gemini CLI / Copilot CLI
+
+Use the harness-specific skill loading path, but keep the same launcher invocation.
+
 ## Uninstall
 
 ```bash
-rm -rf <workspace-root>/.superpowers/pyramid-memory/
+rm -rf <workspace-root>/.superpowers/
 ```
 
-This deletes memory for the current workspace. Export first if needed.
+This deletes pyramid memory and the workspace-local `uv` cache for the current workspace. Export first if needed.

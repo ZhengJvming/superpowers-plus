@@ -13,6 +13,9 @@ These scenarios verify both routing and decomposition quality:
 4. When it reports the pyramid is complete, run:
 
 ```bash
+UV_CACHE_DIR="$PWD/.superpowers/uv-cache" \
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+UV_INDEX_STRATEGY=unsafe-best-match \
 uv run --with pyyaml skills/pyramid-decomposition/tests/evals/run_eval.py <scenario.md>
 ```
 
