@@ -21,6 +21,9 @@ class Config:
     db_path: str = str(PYRAMID_MEMORY_DIR / "data.cozo")
     default_project: Optional[str] = None
     initialized: bool = False
+    display_tree_format: str = "ascii"
+    scan_last_commit: Optional[str] = None
+    scan_project_root: Optional[str] = None
 
     def expanded_db_path(self) -> str:
         return str(Path(self.db_path).expanduser().resolve())
@@ -71,12 +74,17 @@ def load_config(path: Path) -> Config:
     embedding = data.get("embedding", {})
     storage = data.get("storage", {})
     meta = data.get("meta", {})
+    display = data.get("display", {})
+    scan = data.get("scan", {})
 
     return Config(
         embedding_provider=embedding.get("provider", "skip"),
         db_path=storage.get("db_path", str(default_db)),
         default_project=meta.get("default_project"),
         initialized=meta.get("initialized", False),
+        display_tree_format=display.get("tree_format", "ascii"),
+        scan_last_commit=scan.get("last_commit"),
+        scan_project_root=scan.get("project_root"),
     )
 
 
@@ -95,6 +103,19 @@ def save_config(path: Path, cfg: Config) -> None:
     ]
     if cfg.default_project:
         lines.append(f'default_project = "{cfg.default_project}"')
+    lines.extend(
+        [
+            "",
+            "[display]",
+            f'tree_format = "{cfg.display_tree_format}"',
+        ]
+    )
+    if cfg.scan_last_commit or cfg.scan_project_root:
+        lines.extend(["", "[scan]"])
+        if cfg.scan_last_commit:
+            lines.append(f'last_commit = "{cfg.scan_last_commit}"')
+        if cfg.scan_project_root:
+            lines.append(f'project_root = "{cfg.scan_project_root}"')
 
     path.write_text("\n".join(lines) + "\n")
 

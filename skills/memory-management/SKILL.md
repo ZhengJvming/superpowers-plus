@@ -52,9 +52,20 @@ Do not re-probe per call unless the user explicitly reconfigures the store.
 | Add dependency edge | `edge add --kind dependency --from A --to B` |
 | Store split decision | `decision store --id D --node N --question Q --options '[]' --chosen C --reasoning R` |
 | Add interface | `interface add --id I --node N --name Name --description D --spec S` |
+| Add file reference | `file-ref add --id F --node N --path P --lines "*" --role read|modify|test|create --content-hash H` |
+| List file references | `file-ref list --node <leaf-id>` |
+| Check stale file references | `file-ref check --node <leaf-id>` |
 | Recall similar nodes | `memory recall --query "..." [--semantic]` |
 | Assemble leaf package | `memory context --node <leaf-id>` |
 | Check 5 criteria | `memory check-leaf-criteria --node <leaf-id>` |
+| Recompute context size | `memory recompute-tokens --node <leaf-id>` |
+| Freshness check | `memory freshness` |
+| Incremental refresh | `memory refresh` |
+| Tree view | `memory tree [--format ascii|mermaid] [--show-deps]` |
+| Scratch write | `scratch write --key K --value V [--category must_persist|session_keep] [--ttl session|persist]` |
+| Scratch list | `scratch list [--category must_persist|session_keep]` |
+| Scratch promote | `scratch promote --key K --node N --as decision|interface` |
+| Scratch clear | `scratch clear [--ttl session|persist]` |
 | Validate whole project | `memory validate` |
 | Project stats | `memory stats` |
 | Health check | `memory doctor` |
@@ -92,9 +103,73 @@ The package contains:
 - ancestor and leaf decisions
 - the leaf interfaces and dependency interfaces
 - dependency summary
+- attached `file_refs` for the exact files to read or modify
 - token estimate
 
 Pass this package as the task context. Do not pass the full pyramid unless the user explicitly asks for it.
+
+If any file ref in the package has `status: stale`, re-read that file before making implementation decisions. Stale refs may also include a warning string in the package.
+
+## Existing Project Pattern
+
+At session start on an existing codebase:
+
+```bash
+uv run skills/memory-management/scripts/memory_cli.py memory freshness
+```
+
+Interpretation:
+- `fresh`: keep going
+- `stale`: run `memory refresh`
+- `unknown`: no scan baseline exists yet; trigger `codebase-exploration`
+
+When a file changes after the last scan:
+
+```bash
+uv run skills/memory-management/scripts/memory_cli.py memory refresh
+```
+
+This marks affected `file_refs` as `stale` and advances `scan.last_commit`.
+
+## Session Context Management
+
+### When to write to scratchpad
+
+Write a scratch entry when losing the finding would force you to re-run tools.
+
+Use `must_persist` for:
+- user constraints and preferences
+- architectural findings that change decisions
+- hidden couplings or non-obvious behaviors
+
+Use `session_keep` for:
+- module layout discoveries
+- config/env details
+- API response shapes you still need in this session
+
+Do not write:
+- raw tool output
+- dead ends
+- duplicate information already present in scratch
+
+### Pre-decision recall gate
+
+Before any of these actions:
+- `node create`
+- `decision store`
+- proposing a split
+- answering an architecture question
+- committing code
+
+Run:
+
+```bash
+uv run skills/memory-management/scripts/memory_cli.py scratch list
+uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<what you're about to decide>" --k 3
+uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <current-node> --summary
+```
+
+Synthesize those three inputs before acting.
 
 ## Leaf Criteria Pattern
 
@@ -126,6 +201,7 @@ Without `--criteria-confirmed`, the CLI will reject the transition.
 - `criteria_not_confirmed`: run `memory check-leaf-criteria` and then re-run with `--criteria-confirmed`
 - `criteria_failed`: fix the reported interface, token budget, or dependency issue first
 - `degraded: true` during recall: semantic path was unavailable, BM25 results are still usable
+- `status: stale` on a file ref: the file changed since the last scan, re-read it
 
 ## Boundaries
 

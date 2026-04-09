@@ -5,9 +5,9 @@ from collections import defaultdict
 from typing import Optional, Protocol
 
 try:
-    from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from .models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
 except ImportError:
-    from models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
 
 
 class StoreError(Exception):
@@ -25,7 +25,9 @@ class MemoryStore(Protocol):
     def get_node(self, project: str, node_id: str) -> Node: ...
     def update_node(self, project: str, node_id: str, **fields) -> Node: ...
     def delete_node(self, project: str, node_id: str) -> None: ...
-    def list_nodes(self, project: str, *, status: Optional[str] = None) -> list[Node]: ...
+    def list_nodes(
+        self, project: str, *, status: Optional[str] = None, level: Optional[int] = None
+    ) -> list[Node]: ...
 
     def add_edge(self, edge: Edge) -> None: ...
     def remove_edge(self, kind: str, from_id: str, to_id: str) -> None: ...
@@ -40,6 +42,11 @@ class MemoryStore(Protocol):
     def list_decisions(self, project: str, node_id: str) -> list[Decision]: ...
     def add_interface(self, iface: Interface) -> None: ...
     def list_interfaces(self, project: str, node_id: str) -> list[Interface]: ...
+    def add_file_ref(self, file_ref: FileRef) -> None: ...
+    def list_file_refs(self, project: str, node_id: str) -> list[FileRef]: ...
+    def update_file_ref(self, file_ref_id: str, **fields) -> FileRef: ...
+    def delete_file_ref(self, file_ref_id: str) -> None: ...
+    def check_file_refs(self, project: str, node_id: str) -> dict: ...
 
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]: ...
     def assemble_context(self, project: str, leaf_id: str) -> ContextPackage: ...
@@ -57,6 +64,7 @@ class InMemoryStore:
         self._edges: list[Edge] = []
         self._decisions: list[Decision] = []
         self._interfaces: list[Interface] = []
+        self._file_refs: list[FileRef] = []
 
     def create_node(self, node: Node) -> None:
         key = (node.project, node.id)
@@ -80,10 +88,14 @@ class InMemoryStore:
         self._nodes.pop((project, node_id), None)
         self._edges = [e for e in self._edges if e.from_id != node_id and e.to_id != node_id]
 
-    def list_nodes(self, project: str, *, status: Optional[str] = None) -> list[Node]:
+    def list_nodes(
+        self, project: str, *, status: Optional[str] = None, level: Optional[int] = None
+    ) -> list[Node]:
         nodes = [n for (p, _), n in self._nodes.items() if p == project]
         if status is not None:
             nodes = [n for n in nodes if n.status == status]
+        if level is not None:
+            nodes = [n for n in nodes if n.level == level]
         return nodes
 
     def add_edge(self, edge: Edge) -> None:
@@ -166,6 +178,34 @@ class InMemoryStore:
     def list_interfaces(self, project: str, node_id: str) -> list[Interface]:
         return [i for i in self._interfaces if i.node_id == node_id]
 
+    def add_file_ref(self, file_ref: FileRef) -> None:
+        self._file_refs = [fr for fr in self._file_refs if fr.id != file_ref.id]
+        self._file_refs.append(file_ref)
+
+    def list_file_refs(self, project: str, node_id: str) -> list[FileRef]:
+        return [fr for fr in self._file_refs if fr.node_id == node_id]
+
+    def update_file_ref(self, file_ref_id: str, **fields) -> FileRef:
+        for file_ref in self._file_refs:
+            if file_ref.id == file_ref_id:
+                for key, value in fields.items():
+                    setattr(file_ref, key, value)
+                return file_ref
+        raise StoreError(f"file_ref not found: {file_ref_id}")
+
+    def delete_file_ref(self, file_ref_id: str) -> None:
+        self._file_refs = [fr for fr in self._file_refs if fr.id != file_ref_id]
+
+    def check_file_refs(self, project: str, node_id: str) -> dict:
+        refs = self.list_file_refs(project, node_id)
+        stale = [fr for fr in refs if fr.status == "stale"]
+        return {
+            "total": len(refs),
+            "current": len(refs) - len(stale),
+            "stale": len(stale),
+            "stale_paths": [fr.path for fr in stale],
+        }
+
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]:
         terms = [t.lower() for t in re.findall(r"\w+", query)]
         scored: list[ScoredNode] = []
@@ -196,6 +236,16 @@ class InMemoryStore:
             + sum(len(d["reasoning"]) + len(d["tradeoffs"]) for d in decisions)
             + sum(len(i["spec"]) for i in interfaces)
         )
+        file_refs_raw = self.list_file_refs(project, leaf_id)
+        file_refs = []
+        for file_ref in file_refs_raw:
+            payload = file_ref.to_dict()
+            if file_ref.status == "stale":
+                payload["warning"] = (
+                    f"STALE: {file_ref.path} has changed since last scan. Re-read before modifying."
+                )
+            file_refs.append(payload)
+        total_chars += sum(len(fr.path) + len(fr.lines) + len(fr.role) for fr in file_refs_raw)
 
         return ContextPackage(
             node=leaf.to_dict(),
@@ -204,6 +254,7 @@ class InMemoryStore:
             interfaces=interfaces,
             deps=[{"id": d["id"], "name": d["name"], "status": d["status"]} for d in deps],
             tokens_estimate=total_chars // 4,
+            file_refs=file_refs,
         )
 
     def check_leaf_criteria(self, project: str, node_id: str) -> dict:

@@ -32,3 +32,33 @@ def test_default_config_path_uses_git_root(tmp_path):
     assert default_config_path(cwd=nested) == (
         workspace / ".superpowers" / "pyramid-memory" / "config.toml"
     ).resolve()
+
+
+def test_config_display_section(tmp_path):
+    path = tmp_path / "config.toml"
+    cfg = Config(initialized=True, default_project="demo", display_tree_format="mermaid")
+    save_config(path, cfg)
+    loaded = load_config(path)
+    assert loaded.display_tree_format == "mermaid"
+
+
+def test_config_display_defaults_to_ascii(tmp_path):
+    path = tmp_path / "config.toml"
+    cfg = Config(initialized=True)
+    save_config(path, cfg)
+    loaded = load_config(path)
+    assert loaded.display_tree_format == "ascii"
+
+
+def test_config_scan_section(tmp_path):
+    path = tmp_path / "config.toml"
+    cfg = Config(
+        initialized=True,
+        default_project="demo",
+        scan_last_commit="abc123",
+        scan_project_root="/home/user/project",
+    )
+    save_config(path, cfg)
+    loaded = load_config(path)
+    assert loaded.scan_last_commit == "abc123"
+    assert loaded.scan_project_root == "/home/user/project"

@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -65,6 +65,25 @@ class Interface:
 
 
 @dataclass
+class FileRef:
+    id: str
+    node_id: str
+    path: str
+    lines: str
+    role: str
+    content_hash: str
+    scanned_at: str
+    status: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "FileRef":
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__})
+
+
+@dataclass
 class ScoredNode:
     node: Node
     score: float
@@ -79,6 +98,23 @@ class ContextPackage:
     interfaces: list[dict[str, Any]]
     deps: list[dict[str, Any]]
     tokens_estimate: int
+    file_refs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class ScratchEntry:
+    key: str
+    value: str
+    created_at: str
+    category: str = "session_keep"
+    ttl: str = "session"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "ScratchEntry":
+        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})

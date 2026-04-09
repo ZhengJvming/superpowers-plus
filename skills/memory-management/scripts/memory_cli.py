@@ -11,6 +11,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 
 import click
 
@@ -19,6 +20,7 @@ from output import emit, emit_error
 
 VERSION = "0.1.0-m1"
 WORKSPACE_ROOT_OVERRIDE: Path | None = None
+SUMMARY_FIELDS = ("id", "name", "description", "status", "level", "node_type")
 
 
 def _now() -> str:
@@ -57,6 +59,21 @@ def _project(opt_project: str | None, cfg: Config) -> str:
     if not project:
         emit_error("no project specified and no default_project configured", code="missing_project")
     return project
+
+
+def _node_payloads(nodes: Iterable[object], *, summary: bool = False) -> list[dict]:
+    payloads = [n.to_dict() if hasattr(n, "to_dict") else n for n in nodes]
+    if not summary:
+        return payloads
+    return [{key: payload[key] for key in SUMMARY_FIELDS if key in payload} for payload in payloads]
+
+
+def _scratchpad():
+    from scratchpad import ScratchpadStore
+
+    cfg = _load()
+    storage_dir = Path(cfg.expanded_db_path()).parent
+    return ScratchpadStore(storage_dir / "scratchpad.json")
 
 
 @click.group()
@@ -135,21 +152,50 @@ def config_show() -> None:
             "embedding_provider": cfg.embedding_provider,
             "db_path": cfg.expanded_db_path(),
             "default_project": cfg.default_project,
+            "display_tree_format": cfg.display_tree_format,
+            "scan_last_commit": cfg.scan_last_commit,
+            "scan_project_root": cfg.scan_project_root,
         }
     )
 
 
 @config.command("set")
-@click.argument("key")
-@click.argument("value")
-def config_set(key: str, value: str) -> None:
+@click.option("--key", "key_opt")
+@click.option("--value", "value_opt")
+@click.argument("args", nargs=-1)
+def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]) -> None:
     """Set a configuration value."""
+    if key_opt is not None and value_opt is not None:
+        key, value = key_opt, value_opt
+    elif len(args) == 2:
+        key, value = args
+    else:
+        emit_error("config set requires key and value", code="invalid_config_args")
+
     cfg = _load()
-    if key not in {"embedding_provider", "default_project", "db_path"}:
+    if key not in {
+        "embedding_provider",
+        "default_project",
+        "db_path",
+        "display.tree_format",
+        "scan.last_commit",
+        "scan.project_root",
+    }:
         emit_error(f"unknown config key: {key}")
     if key == "db_path":
         value = str(Path(value).expanduser().resolve())
-    setattr(cfg, key, value)
+        setattr(cfg, key, value)
+    elif key == "display.tree_format":
+        if value not in {"ascii", "mermaid"}:
+            emit_error("display.tree_format must be one of: ascii, mermaid", code="invalid_config_value")
+        cfg.display_tree_format = value
+    elif key == "scan.last_commit":
+        cfg.scan_last_commit = value
+    elif key == "scan.project_root":
+        cfg.scan_project_root = str(Path(value).expanduser().resolve())
+        value = cfg.scan_project_root
+    else:
+        setattr(cfg, key, value)
     save_config(_config_path(), cfg)
     emit({"updated": {key: value}})
 
@@ -162,7 +208,14 @@ def node() -> None:
 @node.command("create")
 @click.option("--id", "node_id", required=True)
 @click.option("--name", required=True)
-@click.option("--type", "node_type", type=click.Choice(["root", "branch", "leaf"]), required=True)
+@click.option(
+    "--type",
+    "node_type",
+    type=click.Choice(
+        ["root", "branch", "leaf", "existing_module", "change_root", "change_branch", "change_leaf"]
+    ),
+    required=True,
+)
 @click.option("--level", type=int, required=True)
 @click.option("--description", required=True)
 @click.option("--origin", type=click.Choice(["user_stated", "skill_inferred"]), required=True)
@@ -274,12 +327,14 @@ def node_delete(node_id: str, project: str | None) -> None:
 
 @node.command("list")
 @click.option("--status")
+@click.option("--level", type=int, default=None)
+@click.option("--summary", is_flag=True)
 @click.option("--project")
-def node_list(status: str | None, project: str | None) -> None:
+def node_list(status: str | None, level: int | None, summary: bool, project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
-    nodes = store.list_nodes(p, status=status)
-    emit({"nodes": [n.to_dict() for n in nodes]})
+    nodes = store.list_nodes(p, status=status, level=level)
+    emit({"nodes": _node_payloads(nodes, summary=summary)})
 
 
 @cli.group()
@@ -318,32 +373,35 @@ def query() -> None:
 
 @query.command("children")
 @click.option("--id", "node_id", required=True)
+@click.option("--summary", is_flag=True)
 @click.option("--project")
-def query_children(node_id: str, project: str | None) -> None:
+def query_children(node_id: str, summary: bool, project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
     nodes = store.query_children(p, node_id)
-    emit({"nodes": [n.to_dict() for n in nodes]})
+    emit({"nodes": _node_payloads(nodes, summary=summary)})
 
 
 @query.command("ancestors")
 @click.option("--id", "node_id", required=True)
+@click.option("--summary", is_flag=True)
 @click.option("--project")
-def query_ancestors(node_id: str, project: str | None) -> None:
+def query_ancestors(node_id: str, summary: bool, project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
     nodes = store.query_ancestors(p, node_id)
-    emit({"nodes": [n.to_dict() for n in nodes]})
+    emit({"nodes": _node_payloads(nodes, summary=summary)})
 
 
 @query.command("subtree")
 @click.option("--root", "root_id", required=True)
+@click.option("--summary", is_flag=True)
 @click.option("--project")
-def query_subtree(root_id: str, project: str | None) -> None:
+def query_subtree(root_id: str, summary: bool, project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
     nodes = store.query_subtree(p, root_id)
-    emit({"nodes": [n.to_dict() for n in nodes]})
+    emit({"nodes": _node_payloads(nodes, summary=summary)})
 
 
 @query.command("deps")
@@ -449,6 +507,161 @@ def interface_list(node_id: str, project: str | None) -> None:
     p = _project(project, cfg)
     interfaces = store.list_interfaces(p, node_id)
     emit({"interfaces": [i.to_dict() for i in interfaces]})
+
+
+@cli.group("file-ref")
+def file_ref_group() -> None:
+    """Manage code file references attached to nodes."""
+
+
+@file_ref_group.command("add")
+@click.option("--id", "ref_id", required=True)
+@click.option("--node", "node_id", required=True)
+@click.option("--path", "file_path", required=True)
+@click.option("--lines", default="*")
+@click.option("--role", required=True, type=click.Choice(["modify", "read", "test", "create"]))
+@click.option("--content-hash", required=True)
+@click.option("--status", default="current", type=click.Choice(["current", "stale", "deleted"]))
+@click.option("--project")
+def file_ref_add(
+    ref_id: str,
+    node_id: str,
+    file_path: str,
+    lines: str,
+    role: str,
+    content_hash: str,
+    status: str,
+    project: str | None,
+) -> None:
+    from models import FileRef
+
+    store, cfg = _store()
+    p = _project(project, cfg)
+    store.get_node(p, node_id)
+    file_ref = FileRef(
+        id=ref_id,
+        node_id=node_id,
+        path=file_path,
+        lines=lines,
+        role=role,
+        content_hash=content_hash,
+        scanned_at=_now(),
+        status=status,
+    )
+    store.add_file_ref(file_ref)
+    emit({"file_ref_id": ref_id})
+
+
+@file_ref_group.command("list")
+@click.option("--node", "node_id", required=True)
+@click.option("--project")
+def file_ref_list(node_id: str, project: str | None) -> None:
+    store, cfg = _store()
+    p = _project(project, cfg)
+    refs = store.list_file_refs(p, node_id)
+    emit({"file_refs": [ref.to_dict() for ref in refs]})
+
+
+@file_ref_group.command("check")
+@click.option("--node", "node_id", required=True)
+@click.option("--project")
+def file_ref_check(node_id: str, project: str | None) -> None:
+    store, cfg = _store()
+    p = _project(project, cfg)
+    emit(store.check_file_refs(p, node_id))
+
+
+@cli.group("scratch")
+def scratch_group() -> None:
+    """Session scratchpad for in-conversation findings."""
+
+
+@scratch_group.command("write")
+@click.option("--key", required=True)
+@click.option("--value", required=True)
+@click.option("--category", default="session_keep", type=click.Choice(["must_persist", "session_keep"]))
+@click.option("--ttl", default="session", type=click.Choice(["session", "persist"]))
+def scratch_write(key: str, value: str, category: str, ttl: str) -> None:
+    from models import ScratchEntry
+
+    scratchpad = _scratchpad()
+    scratchpad.write(
+        ScratchEntry(key=key, value=value, category=category, ttl=ttl, created_at=_now())
+    )
+    emit({"key": key, "written": True})
+
+
+@scratch_group.command("list")
+@click.option("--category", default=None, type=click.Choice(["must_persist", "session_keep"]))
+def scratch_list(category: str | None) -> None:
+    scratchpad = _scratchpad()
+    entries = scratchpad.list_all(category=category)
+    emit({"entries": [entry.to_dict() for entry in entries], "count": len(entries)})
+
+
+@scratch_group.command("promote")
+@click.option("--key", required=True)
+@click.option("--node", "node_id", required=True)
+@click.option("--as", "promote_as", required=True, type=click.Choice(["decision", "interface"]))
+@click.option("--project")
+def scratch_promote(key: str, node_id: str, promote_as: str, project: str | None) -> None:
+    scratchpad = _scratchpad()
+    entries = [entry for entry in scratchpad.list_all() if entry.key == key]
+    if not entries:
+        emit_error(f"scratchpad key not found: {key}", code="not_found")
+
+    entry = entries[0]
+    store, cfg = _store()
+    _project(project, cfg)
+
+    import uuid
+
+    if promote_as == "decision":
+        from models import Decision
+
+        store.store_decision(
+            Decision(
+                id=f"scratch-{key}-{uuid.uuid4().hex[:8]}",
+                node_id=node_id,
+                question=f"Session finding: {key}",
+                options="[]",
+                chosen=entry.value,
+                reasoning=entry.value,
+                tradeoffs="Promoted from session scratchpad",
+                created_at=_now(),
+            )
+        )
+    else:
+        from models import Interface
+
+        store.add_interface(
+            Interface(
+                id=f"scratch-{key}-{uuid.uuid4().hex[:8]}",
+                node_id=node_id,
+                name=key,
+                description=f"Discovered during session: {key}",
+                spec=entry.value,
+                created_at=_now(),
+            )
+        )
+
+    scratchpad.delete(key)
+    emit({"key": key, "node_id": node_id, "promoted_as": promote_as})
+
+
+@scratch_group.command("clear")
+@click.option(
+    "--ttl",
+    default=None,
+    type=click.Choice(["session", "persist"]),
+    help="Only clear entries with this TTL. Omit to clear all.",
+)
+def scratch_clear(ttl: str | None) -> None:
+    scratchpad = _scratchpad()
+    before = len(scratchpad.list_all())
+    scratchpad.clear(ttl=ttl)
+    after = len(scratchpad.list_all())
+    emit({"cleared": before - after, "remaining": after})
 
 
 @cli.group()
@@ -576,6 +789,76 @@ def memory_doctor() -> None:
     )
 
 
+@memory.command("freshness")
+@click.option("--project")
+def memory_freshness(project: str | None) -> None:
+    store, cfg = _store()
+    _project(project, cfg)
+    if not cfg.scan_last_commit or not cfg.scan_project_root:
+        emit({"status": "unknown", "reason": "no scan config", "changed_files": []})
+        return
+
+    from git_utils import git_changed_files, git_head_sha
+
+    project_root = Path(cfg.scan_project_root)
+    current_head = git_head_sha(project_root)
+    if current_head == cfg.scan_last_commit:
+        emit(
+            {
+                "status": "fresh",
+                "last_commit": cfg.scan_last_commit,
+                "head": current_head,
+                "changed_files": [],
+            }
+        )
+        return
+
+    changed = git_changed_files(project_root, cfg.scan_last_commit)
+    emit(
+        {
+            "status": "stale",
+            "last_commit": cfg.scan_last_commit,
+            "head": current_head,
+            "changed_files": changed,
+            "changed_count": len(changed),
+        }
+    )
+
+
+@memory.command("refresh")
+@click.option("--project")
+def memory_refresh(project: str | None) -> None:
+    store, cfg = _store()
+    p = _project(project, cfg)
+    if not cfg.scan_last_commit or not cfg.scan_project_root:
+        emit_error(
+            "no scan config - run freshness first or set scan.last_commit + scan.project_root",
+            code="no_scan_config",
+        )
+
+    from git_utils import git_changed_files, git_head_sha
+
+    project_root = Path(cfg.scan_project_root)
+    current_head = git_head_sha(project_root)
+    if current_head == cfg.scan_last_commit:
+        emit({"marked_stale": 0, "stale_paths": [], "message": "already fresh"})
+        return
+
+    changed_files = set(git_changed_files(project_root, cfg.scan_last_commit))
+    marked_stale = 0
+    stale_paths: list[str] = []
+    for node in store.list_nodes(p):
+        for file_ref in store.list_file_refs(p, node.id):
+            if file_ref.status == "current" and file_ref.path in changed_files:
+                store.update_file_ref(file_ref.id, status="stale", scanned_at=_now())
+                marked_stale += 1
+                stale_paths.append(file_ref.path)
+
+    cfg.scan_last_commit = current_head
+    save_config(_config_path(), cfg)
+    emit({"marked_stale": marked_stale, "stale_paths": stale_paths, "new_last_commit": current_head})
+
+
 @memory.command("reindex")
 @click.option("--project")
 def memory_reindex(project: str | None) -> None:
@@ -594,6 +877,75 @@ def memory_reindex(project: str | None) -> None:
         except Exception:
             pass
     emit({"reindexed": count})
+
+
+@memory.command("recompute-tokens")
+@click.option("--node", "node_id", required=True)
+@click.option("--project")
+def memory_recompute_tokens(node_id: str, project: str | None) -> None:
+    """Recompute a node's tokens_estimate from live context assembly."""
+    store, cfg = _store()
+    p = _project(project, cfg)
+    pkg = store.assemble_context(p, node_id)
+    new_estimate = pkg.tokens_estimate
+    store.update_node(p, node_id, tokens_estimate=new_estimate, updated_at=_now())
+    emit({"node_id": node_id, "tokens_estimate": new_estimate})
+
+
+def _default_tree_root(store, project: str) -> str:
+    nodes = store.list_nodes(project)
+    root_nodes = sorted(
+        [node for node in nodes if node.node_type == "root"],
+        key=lambda node: (node.level, node.created_at, node.id),
+    )
+    if root_nodes:
+        return root_nodes[0].id
+    if not nodes:
+        emit_error("no nodes exist for project", code="missing_root")
+    return sorted(nodes, key=lambda node: (node.level, node.created_at, node.id))[0].id
+
+
+def _tree_data(store, project: str, root_id: str) -> tuple[dict[str, object], dict[str, list[str]]]:
+    subtree_nodes = store.query_subtree(project, root_id)
+    nodes_by_id = {node.id: node for node in subtree_nodes}
+    children: dict[str, list[str]] = {}
+    for node in subtree_nodes:
+        child_nodes = [child.id for child in store.query_children(project, node.id) if child.id in nodes_by_id]
+        children[node.id] = child_nodes
+    return nodes_by_id, children
+
+
+@memory.command("tree")
+@click.option("--root", "root_id", default=None, help="Root node ID. Defaults to the project's root node.")
+@click.option(
+    "--format",
+    "fmt",
+    default=None,
+    type=click.Choice(["ascii", "mermaid"]),
+    help="Output format. Defaults to config display_tree_format.",
+)
+@click.option("--show-deps", is_flag=True, help="Include dependency edges in Mermaid output.")
+@click.option("--project")
+def memory_tree(root_id: str | None, fmt: str | None, show_deps: bool, project: str | None) -> None:
+    from tree_renderer import render_ascii, render_mermaid
+
+    store, cfg = _store()
+    p = _project(project, cfg)
+    actual_root = root_id or _default_tree_root(store, p)
+    nodes_by_id, children = _tree_data(store, p, actual_root)
+    dep_edges: list[tuple[str, str]] = []
+    if show_deps:
+        for node_id in nodes_by_id:
+            for dep_node in store.query_deps(p, node_id):
+                if dep_node.id in nodes_by_id:
+                    dep_edges.append((node_id, dep_node.id))
+
+    actual_format = fmt or cfg.display_tree_format
+    if actual_format == "mermaid":
+        tree = render_mermaid(actual_root, nodes_by_id, children, dep_edges=dep_edges)
+    else:
+        tree = render_ascii(actual_root, nodes_by_id, children)
+    emit({"tree": tree, "format": actual_format, "root": actual_root})
 
 
 @memory.command("export")

@@ -76,6 +76,15 @@ def test_query_ancestors(initialized):
     assert [n["id"] for n in payload["data"]["nodes"]] == ["a", "root"]
 
 
+def test_query_ancestors_summary(initialized):
+    _seed_pyramid(initialized)
+    r = initialized("query", "ancestors", "--id", "b", "--summary")
+    nodes = json.loads(r.stdout)["data"]["nodes"]
+    assert len(nodes) == 2
+    for n in nodes:
+        assert set(n.keys()) == {"id", "name", "description", "status", "level", "node_type"}
+
+
 def test_query_subtree(initialized):
     _seed_pyramid(initialized)
     r = initialized("query", "subtree", "--root", "root")

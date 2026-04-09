@@ -57,27 +57,62 @@ uv run skills/memory-management/scripts/memory_cli.py node create \
   --origin user_stated
 ```
 
-### Phase 1: Recursive Decomposition
+### Phase 0.5: Existing Project Impact Analysis
 
-For the current node:
+If the user is modifying an existing codebase rather than designing a greenfield system:
 
-1. Decide whether it is still a branch or close to a leaf.
-2. Recall prior similar work if useful:
+1. Run `memory freshness`.
+2. If freshness is `stale`, run `memory refresh`.
+3. If freshness is `unknown` or recall returns nothing useful, activate `codebase-exploration`.
+4. Create or reuse `existing_module` / `change_*` nodes to map the code area before decomposition.
+5. Add `file-ref` entries for the concrete files that define the current boundary.
+
+Do not ask the user whether to explore. Existing-project exploration is an automatic preparation step.
+
+### Phase 1: BFS Decomposition (level by level)
+
+**Core rule: process one level at a time, never recurse depth-first.**
+
+When processing node `N` at level `L`, load only:
+- `node get --id N`
+- `query ancestors --id N --summary`
+- `node list --level L --summary`
+- the parent's split decision
+- optional `memory recall --query "<N.description>" --k 3`
+- current scratchpad findings from `scratch list`
+
+Do not load:
+- the entire subtree
+- non-ancestor decisions
+- full details for sibling nodes
+- full pyramid state mid-decomposition
+
+#### BFS loop
+
+1. `node list --level <current-level>` to get pending nodes.
+2. For each node at that level:
+   - run the pre-decision recall gate:
 
 ```bash
-uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<node description>" --k 5
+uv run skills/memory-management/scripts/memory_cli.py scratch list
+uv run skills/memory-management/scripts/memory_cli.py memory recall --query "<what you are about to decide>" --k 3
+uv run skills/memory-management/scripts/memory_cli.py query ancestors --id <node-id> --summary
 ```
 
-3. Propose 3-5 children along natural boundaries.
-4. Ask the user focused micro-questions to confirm or refine those children.
-5. For each accepted child:
+   - decide whether the node can already be a leaf
+   - if not, propose 3-5 children along natural boundaries
+   - confirm the split with focused micro-questions
+   - create children and a split decision
+3. After finishing the whole level, advance to the next level.
+
+For each accepted child:
 
 ```bash
 uv run skills/memory-management/scripts/memory_cli.py node create \
   --id <child-id> \
   --name "<child-name>" \
   --type branch \
-  --level <level> \
+  --level <parent-level + 1> \
   --description "<one-sentence description>" \
   --origin <user_stated|skill_inferred>
 
@@ -87,20 +122,20 @@ uv run skills/memory-management/scripts/memory_cli.py edge add \
   --to <child-id>
 ```
 
-6. Record why the split happened:
+Record the split decision on the parent:
 
 ```bash
 uv run skills/memory-management/scripts/memory_cli.py decision store \
   --id "d-split-<node-id>" \
   --node <node-id> \
   --question "How should <node-name> be decomposed?" \
-  --options '["option-a","option-b"]' \
-  --chosen "option-a" \
+  --options '["chosen-split", "alt-1", "alt-2"]' \
+  --chosen "<chosen-split>" \
   --reasoning "<why this split>" \
   --tradeoffs "<tradeoffs>"
 ```
 
-7. Recurse into each child.
+Do not recurse into the children immediately. They are processed when the BFS loop advances.
 
 ### Phase 1.5: Leaf Qualification
 

@@ -6,10 +6,10 @@ from pathlib import Path
 from pycozo.client import Client
 
 try:
-    from .models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from .models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
     from .store import NodeNotFound, StoreError
 except ImportError:
-    from models import ContextPackage, Decision, Edge, Interface, Node, ScoredNode
+    from models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
     from store import NodeNotFound, StoreError
 
 SCHEMA_RELATIONS = [
@@ -55,6 +55,17 @@ SCHEMA_RELATIONS = [
         description: String,
         spec: String,
         created_at: String
+    }""",
+    """:create file_ref {
+        id: String,
+        =>
+        node_id: String,
+        path: String,
+        lines: String,
+        role: String,
+        content_hash: String,
+        scanned_at: String,
+        status: String
     }""",
     """:create config {
         key: String,
@@ -212,9 +223,11 @@ class CozoStore:
             {"i": node_id, "p": project},
         )
 
-    def list_nodes(self, project: str, *, status: str | None = None) -> list[Node]:
+    def list_nodes(
+        self, project: str, *, status: str | None = None, level: int | None = None
+    ) -> list[Node]:
         self.ensure_schema()
-        if status is None:
+        if status is None and level is None:
             result = self.client.run(
                 """
                 ?[id, project, name, node_type, level, description, status, origin,
@@ -225,7 +238,7 @@ class CozoStore:
                 """,
                 {"p": project},
             )
-        else:
+        elif status is not None and level is None:
             result = self.client.run(
                 """
                 ?[id, project, name, node_type, level, description, status, origin,
@@ -235,6 +248,28 @@ class CozoStore:
                   project = $p, status = $s
                 """,
                 {"p": project, "s": status},
+            )
+        elif status is None and level is not None:
+            result = self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at] :=
+                  *node{id, project, name, node_type, level, description, status, origin,
+                        tokens_estimate, created_at, updated_at},
+                  project = $p, level = $l
+                """,
+                {"p": project, "l": level},
+            )
+        else:
+            result = self.client.run(
+                """
+                ?[id, project, name, node_type, level, description, status, origin,
+                  tokens_estimate, created_at, updated_at] :=
+                  *node{id, project, name, node_type, level, description, status, origin,
+                        tokens_estimate, created_at, updated_at},
+                  project = $p, status = $s, level = $l
+                """,
+                {"p": project, "s": status, "l": level},
             )
 
         cols = result["headers"]
@@ -410,6 +445,70 @@ class CozoStore:
         cols = result["headers"]
         return [Interface(**dict(zip(cols, row))) for row in result["rows"]]
 
+    def add_file_ref(self, file_ref: FileRef) -> None:
+        self.ensure_schema()
+        self.client.run(
+            """
+            ?[id, node_id, path, lines, role, content_hash, scanned_at, status] <- [[
+                $id, $node_id, $path, $lines, $role, $content_hash, $scanned_at, $status
+            ]]
+            :put file_ref {id => node_id, path, lines, role, content_hash, scanned_at, status}
+            """,
+            file_ref.to_dict(),
+        )
+
+    def list_file_refs(self, project: str, node_id: str) -> list[FileRef]:
+        self.ensure_schema()
+        result = self.client.run(
+            """
+            ?[id, node_id, path, lines, role, content_hash, scanned_at, status] :=
+              *file_ref{id, node_id, path, lines, role, content_hash, scanned_at, status},
+              node_id = $node_id
+            """,
+            {"node_id": node_id},
+        )
+        cols = result["headers"]
+        return [FileRef(**dict(zip(cols, row))) for row in result["rows"]]
+
+    def update_file_ref(self, file_ref_id: str, **fields) -> FileRef:
+        self.ensure_schema()
+        result = self.client.run(
+            """
+            ?[id, node_id, path, lines, role, content_hash, scanned_at, status] :=
+              *file_ref{id, node_id, path, lines, role, content_hash, scanned_at, status},
+              id = $id
+            """,
+            {"id": file_ref_id},
+        )
+        if not result["rows"]:
+            raise StoreError(f"file_ref not found: {file_ref_id}")
+        cols = result["headers"]
+        current = FileRef(**dict(zip(cols, result["rows"][0])))
+        for key, value in fields.items():
+            setattr(current, key, value)
+        self.add_file_ref(current)
+        return current
+
+    def delete_file_ref(self, file_ref_id: str) -> None:
+        self.ensure_schema()
+        self.client.run(
+            """
+            ?[id] <- [[$id]]
+            :rm file_ref {id}
+            """,
+            {"id": file_ref_id},
+        )
+
+    def check_file_refs(self, project: str, node_id: str) -> dict:
+        refs = self.list_file_refs(project, node_id)
+        stale = [ref for ref in refs if ref.status == "stale"]
+        return {
+            "total": len(refs),
+            "current": len(refs) - len(stale),
+            "stale": len(stale),
+            "stale_paths": [ref.path for ref in stale],
+        }
+
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]:
         import re
 
@@ -494,6 +593,16 @@ class CozoStore:
             + sum(len(d["reasoning"]) + len(d["tradeoffs"]) for d in decisions)
             + sum(len(i["spec"]) for i in interfaces)
         )
+        file_refs_raw = self.list_file_refs(project, leaf_id)
+        file_refs = []
+        for file_ref in file_refs_raw:
+            payload = file_ref.to_dict()
+            if file_ref.status == "stale":
+                payload["warning"] = (
+                    f"STALE: {file_ref.path} has changed since last scan. Re-read before modifying."
+                )
+            file_refs.append(payload)
+        total_chars += sum(len(fr.path) + len(fr.lines) + len(fr.role) for fr in file_refs_raw)
 
         return ContextPackage(
             node=leaf.to_dict(),
@@ -502,6 +611,7 @@ class CozoStore:
             interfaces=interfaces,
             deps=[{"id": d.id, "name": d.name, "status": d.status} for d in deps_nodes],
             tokens_estimate=total_chars // 4,
+            file_refs=file_refs,
         )
 
     def check_leaf_criteria(self, project: str, node_id: str) -> dict:

@@ -45,3 +45,29 @@ def run_cli(tmp_path, monkeypatch):
         )
 
     return _run
+
+
+@pytest.fixture
+def run_cli_with_workspace(monkeypatch):
+    def _factory(workspace: Path):
+        monkeypatch.setenv("HOME", str(workspace))
+
+        def _run(*args: str, cwd: Path | None = None):
+            return subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    str(SCRIPTS / "memory_cli.py"),
+                    "--workspace-root",
+                    str(workspace),
+                    *args,
+                ],
+                capture_output=True,
+                text=True,
+                cwd=str(cwd or workspace),
+                env={**os.environ, "HOME": str(workspace)},
+            )
+
+        return _run
+
+    return _factory

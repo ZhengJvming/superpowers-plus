@@ -127,3 +127,61 @@ uv run skills/memory-management/scripts/memory_cli.py node update \
 ```
 
 `--criteria-confirmed` means you personally checked criteria 1 and 3, and the CLI re-verified 2, 4, and 5 at transition time.
+
+---
+
+## Context Management During Decomposition
+
+### Why BFS, not DFS
+
+Depth-first decomposition accumulates full detail from every ancestor and quickly recreates the same context overflow that pyramid memory is supposed to avoid. Breadth-first decomposition keeps only one active node in full detail and everything else as summaries.
+
+At any step, keep:
+- one current node in full detail
+- ancestor chain as summaries
+- same-level siblings as summaries
+- one parent decision
+
+Do not load:
+- full subtrees
+- non-ancestor decisions
+- the whole pyramid mid-decomposition
+
+### The Summary Principle
+
+Use full detail for the single node you are working on. Use summaries for ancestors and siblings.
+
+Summary shape:
+- `id`
+- `name`
+- `description`
+- `status`
+- `level`
+- `node_type`
+
+When you want more context, try in this order:
+1. Re-read the parent's split decision
+2. Run `memory recall`
+3. Ask the user a clarifying question
+
+Loading more raw context is the last resort, not the default move.
+
+---
+
+## Existing Projects
+
+When decomposing a change to an existing codebase:
+
+1. Run `memory freshness` at session start.
+2. If the result is `stale`, run `memory refresh`.
+3. If the result is `unknown` or recall is empty, trigger `codebase-exploration`.
+4. Create `existing_module` or `change_*` nodes before splitting the change.
+5. Add `file-ref` entries for the exact files that define the boundary.
+
+Use `file_refs` to keep the implementation package concrete:
+- `modify` for files the leaf must edit
+- `read` for files that define the surrounding contract
+- `test` for files that prove the change
+- `create` for planned new files
+
+If any `file_ref` is `stale`, re-read that file before making implementation decisions.

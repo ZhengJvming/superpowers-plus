@@ -74,6 +74,86 @@ def test_node_list_filter_by_status(initialized):
     assert len(rows) == 1 and rows[0]["id"] == "b"
 
 
+def test_node_list_filter_by_level(initialized):
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "r",
+        "--name",
+        "r",
+        "--type",
+        "root",
+        "--level",
+        "0",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "a",
+        "--name",
+        "a",
+        "--type",
+        "branch",
+        "--level",
+        "1",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "b",
+        "--name",
+        "b",
+        "--type",
+        "leaf",
+        "--level",
+        "2",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    r = initialized("node", "list", "--level", "1")
+    nodes = json.loads(r.stdout)["data"]["nodes"]
+    assert len(nodes) == 1 and nodes[0]["id"] == "a"
+
+
+def test_node_list_summary_mode(initialized):
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "a",
+        "--name",
+        "mynode",
+        "--type",
+        "branch",
+        "--level",
+        "1",
+        "--description",
+        "full desc here",
+        "--origin",
+        "user_stated",
+    )
+    r = initialized("node", "list", "--summary")
+    nodes = json.loads(r.stdout)["data"]["nodes"]
+    assert len(nodes) == 1
+    n = nodes[0]
+    assert set(n.keys()) == {"id", "name", "description", "status", "level", "node_type"}
+    assert "created_at" not in n
+    assert "tokens_estimate" not in n
+
+
 def test_node_update_status(initialized):
     initialized(
         "node",
