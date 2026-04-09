@@ -13,6 +13,7 @@ else:
 
 SUPERPOWERS_DIR = Path(".superpowers")
 PYRAMID_MEMORY_DIR = SUPERPOWERS_DIR / "pyramid-memory"
+UV_CACHE_DIR = SUPERPOWERS_DIR / "uv-cache"
 
 
 @dataclass
@@ -36,6 +37,14 @@ def _walk_up(start: Path) -> Iterable[Path]:
 
 def workspace_storage_dir(workspace_root: Path) -> Path:
     return workspace_root.resolve() / PYRAMID_MEMORY_DIR
+
+
+def workspace_superpowers_dir(workspace_root: Path) -> Path:
+    return workspace_root.resolve() / SUPERPOWERS_DIR
+
+
+def workspace_uv_cache_dir(workspace_root: Path) -> Path:
+    return workspace_root.resolve() / UV_CACHE_DIR
 
 
 def resolve_workspace_root(start: Path | None = None, explicit_root: Path | None = None) -> Path:
