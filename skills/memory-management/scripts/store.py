@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+import re
+from collections import defaultdict
+from typing import Optional, Protocol
+
+try:
+    from .models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
+except ImportError:
+    from models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
+
+
+class StoreError(Exception):
+    pass
+
+
+class NodeNotFound(StoreError):
+    pass
+
+
+class MemoryStore(Protocol):
+    """Storage backend contract."""
+
+    def create_node(self, node: Node) -> None: ...
+    def get_node(self, project: str, node_id: str) -> Node: ...
+    def update_node(self, project: str, node_id: str, **fields) -> Node: ...
+    def delete_node(self, project: str, node_id: str) -> None: ...
+    def list_nodes(
+        self, project: str, *, status: Optional[str] = None, level: Optional[int] = None
+    ) -> list[Node]: ...
+
+    def add_edge(self, edge: Edge) -> None: ...
+    def remove_edge(self, kind: str, from_id: str, to_id: str) -> None: ...
+
+    def query_children(self, project: str, node_id: str) -> list[Node]: ...
+    def query_ancestors(self, project: str, node_id: str) -> list[Node]: ...
+    def query_subtree(self, project: str, root_id: str) -> list[Node]: ...
+    def query_deps(self, project: str, node_id: str) -> list[Node]: ...
+    def detect_cycles(self, project: str) -> list[list[str]]: ...
+
+    def store_decision(self, decision: Decision) -> None: ...
+    def list_decisions(self, project: str, node_id: str) -> list[Decision]: ...
+    def add_interface(self, iface: Interface) -> None: ...
+    def list_interfaces(self, project: str, node_id: str) -> list[Interface]: ...
+    def add_file_ref(self, file_ref: FileRef) -> None: ...
+    def list_file_refs(self, project: str, node_id: str) -> list[FileRef]: ...
+    def update_file_ref(self, file_ref_id: str, **fields) -> FileRef: ...
+    def delete_file_ref(self, file_ref_id: str) -> None: ...
+    def check_file_refs(self, project: str, node_id: str) -> dict: ...
+
+    def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]: ...
+    def assemble_context(self, project: str, leaf_id: str) -> ContextPackage: ...
+    def check_leaf_criteria(self, project: str, node_id: str) -> dict: ...
+
+    def validate(self, project: str) -> dict: ...
+    def stats(self, project: str) -> dict: ...
+
+
+class InMemoryStore:
+    """Reference impl for tests. Pure Python, no external dependencies."""
+
+    def __init__(self):
+        self._nodes: dict[tuple[str, str], Node] = {}
+        self._edges: list[Edge] = []
+        self._decisions: list[Decision] = []
+        self._interfaces: list[Interface] = []
+        self._file_refs: list[FileRef] = []
+
+    def create_node(self, node: Node) -> None:
+        key = (node.project, node.id)
+        if key in self._nodes:
+            raise StoreError(f"node already exists: {node.id}")
+        self._nodes[key] = node
+
+    def get_node(self, project: str, node_id: str) -> Node:
+        try:
+            return self._nodes[(project, node_id)]
+        except KeyError as exc:
+            raise NodeNotFound(node_id) from exc
+
+    def update_node(self, project: str, node_id: str, **fields) -> Node:
+        node = self.get_node(project, node_id)
+        for key, value in fields.items():
+            setattr(node, key, value)
+        return node
+
+    def delete_node(self, project: str, node_id: str) -> None:
+        self._nodes.pop((project, node_id), None)
+        self._edges = [e for e in self._edges if e.from_id != node_id and e.to_id != node_id]
+
+    def list_nodes(
+        self, project: str, *, status: Optional[str] = None, level: Optional[int] = None
+    ) -> list[Node]:
+        nodes = [n for (p, _), n in self._nodes.items() if p == project]
+        if status is not None:
+            nodes = [n for n in nodes if n.status == status]
+        if level is not None:
+            nodes = [n for n in nodes if n.level == level]
+        return nodes
+
+    def add_edge(self, edge: Edge) -> None:
+        self._edges.append(edge)
+
+    def remove_edge(self, kind: str, from_id: str, to_id: str) -> None:
+        self._edges = [
+            e
+            for e in self._edges
+            if not (e.kind == kind and e.from_id == from_id and e.to_id == to_id)
+        ]
+
+    def query_children(self, project: str, node_id: str) -> list[Node]:
+        edges = sorted(
+            [e for e in self._edges if e.kind == "hierarchy" and e.from_id == node_id],
+            key=lambda e: e.order_idx,
+        )
+        return [self.get_node(project, edge.to_id) for edge in edges]
+
+    def query_ancestors(self, project: str, node_id: str) -> list[Node]:
+        chain: list[Node] = []
+        current = node_id
+        while True:
+            parent_edges = [e for e in self._edges if e.kind == "hierarchy" and e.to_id == current]
+            if not parent_edges:
+                break
+            current = parent_edges[0].from_id
+            chain.append(self.get_node(project, current))
+        return chain
+
+    def query_subtree(self, project: str, root_id: str) -> list[Node]:
+        out = [self.get_node(project, root_id)]
+        for child in self.query_children(project, root_id):
+            out.extend(self.query_subtree(project, child.id))
+        return out
+
+    def query_deps(self, project: str, node_id: str) -> list[Node]:
+        deps = [e.to_id for e in self._edges if e.kind == "dependency" and e.from_id == node_id]
+        return [self.get_node(project, dep_id) for dep_id in deps]
+
+    def detect_cycles(self, project: str) -> list[list[str]]:
+        adj = defaultdict(list)
+        for edge in self._edges:
+            if edge.kind == "dependency":
+                adj[edge.from_id].append(edge.to_id)
+
+        white, gray, black = 0, 1, 2
+        color = defaultdict(lambda: white)
+        cycles: list[list[str]] = []
+        stack: list[str] = []
+
+        def dfs(node_id: str) -> None:
+            color[node_id] = gray
+            stack.append(node_id)
+            for dep in adj[node_id]:
+                if color[dep] == gray:
+                    idx = stack.index(dep)
+                    cycles.append(stack[idx:] + [dep])
+                elif color[dep] == white:
+                    dfs(dep)
+            stack.pop()
+            color[node_id] = black
+
+        for key in list(adj.keys()):
+            if color[key] == white:
+                dfs(key)
+
+        return cycles
+
+    def store_decision(self, decision: Decision) -> None:
+        self._decisions.append(decision)
+
+    def list_decisions(self, project: str, node_id: str) -> list[Decision]:
+        node_ids = {n.id for n in self.list_nodes(project)}
+        return [d for d in self._decisions if d.node_id == node_id and node_id in node_ids]
+
+    def add_interface(self, iface: Interface) -> None:
+        self._interfaces.append(iface)
+
+    def list_interfaces(self, project: str, node_id: str) -> list[Interface]:
+        return [i for i in self._interfaces if i.node_id == node_id]
+
+    def add_file_ref(self, file_ref: FileRef) -> None:
+        self._file_refs = [fr for fr in self._file_refs if fr.id != file_ref.id]
+        self._file_refs.append(file_ref)
+
+    def list_file_refs(self, project: str, node_id: str) -> list[FileRef]:
+        return [fr for fr in self._file_refs if fr.node_id == node_id]
+
+    def update_file_ref(self, file_ref_id: str, **fields) -> FileRef:
+        for file_ref in self._file_refs:
+            if file_ref.id == file_ref_id:
+                for key, value in fields.items():
+                    setattr(file_ref, key, value)
+                return file_ref
+        raise StoreError(f"file_ref not found: {file_ref_id}")
+
+    def delete_file_ref(self, file_ref_id: str) -> None:
+        self._file_refs = [fr for fr in self._file_refs if fr.id != file_ref_id]
+
+    def check_file_refs(self, project: str, node_id: str) -> dict:
+        refs = self.list_file_refs(project, node_id)
+        stale = [fr for fr in refs if fr.status == "stale"]
+        return {
+            "total": len(refs),
+            "current": len(refs) - len(stale),
+            "stale": len(stale),
+            "stale_paths": [fr.path for fr in stale],
+        }
+
+    def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]:
+        terms = [t.lower() for t in re.findall(r"\w+", query)]
+        scored: list[ScoredNode] = []
+        for node in self.list_nodes(project):
+            text = (node.name + " " + node.description).lower()
+            score = sum(text.count(term) for term in terms)
+            if score > 0:
+                scored.append(ScoredNode(node=node, score=float(score), match_type="bm25"))
+        scored.sort(key=lambda s: s.score, reverse=True)
+        return scored[:k]
+
+    def assemble_context(self, project: str, leaf_id: str) -> ContextPackage:
+        leaf = self.get_node(project, leaf_id)
+        ancestors = [a.to_dict() for a in self.query_ancestors(project, leaf_id)]
+        deps = [d.to_dict() for d in self.query_deps(project, leaf_id)]
+
+        decisions = [d.to_dict() for d in self.list_decisions(project, leaf_id)]
+        for ancestor in self.query_ancestors(project, leaf_id):
+            decisions.extend(d.to_dict() for d in self.list_decisions(project, ancestor.id))
+
+        interfaces = [i.to_dict() for i in self.list_interfaces(project, leaf_id)]
+        for dep_node in self.query_deps(project, leaf_id):
+            interfaces.extend(i.to_dict() for i in self.list_interfaces(project, dep_node.id))
+
+        total_chars = (
+            len(leaf.description)
+            + sum(len(a["description"]) for a in ancestors)
+            + sum(len(d["reasoning"]) + len(d["tradeoffs"]) for d in decisions)
+            + sum(len(i["spec"]) for i in interfaces)
+        )
+        file_refs_raw = self.list_file_refs(project, leaf_id)
+        file_refs = []
+        for file_ref in file_refs_raw:
+            payload = file_ref.to_dict()
+            if file_ref.status == "stale":
+                payload["warning"] = (
+                    f"STALE: {file_ref.path} has changed since last scan. Re-read before modifying."
+                )
+            file_refs.append(payload)
+        total_chars += sum(len(fr.path) + len(fr.lines) + len(fr.role) for fr in file_refs_raw)
+
+        return ContextPackage(
+            node=leaf.to_dict(),
+            ancestors=ancestors,
+            decisions=decisions,
+            interfaces=interfaces,
+            deps=[{"id": d["id"], "name": d["name"], "status": d["status"]} for d in deps],
+            tokens_estimate=total_chars // 4,
+            file_refs=file_refs,
+        )
+
+    def check_leaf_criteria(self, project: str, node_id: str) -> dict:
+        node = self.get_node(project, node_id)
+
+        interfaces = self.list_interfaces(project, node_id)
+        c2_pass = bool(interfaces) and all(len(i.spec) >= 20 for i in interfaces)
+        c2 = {
+            "criterion": "interface_clarity",
+            "passes": c2_pass,
+            "reason": (
+                f"{len(interfaces)} interface(s), all spec >=20 chars"
+                if c2_pass
+                else (
+                    "no interface_def"
+                    if not interfaces
+                    else "at least one interface spec is too short (<20 chars)"
+                )
+            ),
+            "needs_llm_check": False,
+        }
+
+        pkg = self.assemble_context(project, node_id)
+        c4_pass = pkg.tokens_estimate <= 8000
+        c4 = {
+            "criterion": "token_budget",
+            "passes": c4_pass,
+            "reason": f"{pkg.tokens_estimate}/8000 tokens",
+            "needs_llm_check": False,
+        }
+
+        deps = self.query_deps(project, node_id)
+        open_deps: list[str] = []
+        for dep in deps:
+            dep_ifaces = self.list_interfaces(project, dep.id)
+            if dep.status not in ("leaf", "done") and not dep_ifaces:
+                open_deps.append(dep.id)
+        c5_pass = len(open_deps) == 0
+        c5 = {
+            "criterion": "closed_dependencies",
+            "passes": c5_pass,
+            "reason": (
+                "all deps stable (leaf/done OR have interface_def)"
+                if c5_pass
+                else f"unstable deps: {', '.join(open_deps)}"
+            ),
+            "needs_llm_check": False,
+        }
+
+        c1 = {
+            "criterion": "single_responsibility",
+            "passes": None,
+            "needs_llm_check": True,
+            "instruction": (
+                f"Read this node description: {node.description!r}. "
+                "Confirm it describes ONE responsibility with no 'and'/'以及'/'同时'/'plus'. "
+                "If it bundles concerns, split the node first."
+            ),
+        }
+        c3 = {
+            "criterion": "independent_testability",
+            "passes": None,
+            "needs_llm_check": True,
+            "instruction": (
+                "Confirm this leaf can be tested with mocked dependencies only. "
+                "If it requires instantiating sibling leaves to test, the boundary is wrong - "
+                "extract the shared abstraction into a new node first."
+            ),
+        }
+
+        mechanical_pass = c2["passes"] and c4["passes"] and c5["passes"]
+        return {
+            "node_id": node_id,
+            "criteria": [c1, c2, c3, c4, c5],
+            "mechanical_checks_pass": mechanical_pass,
+            "ready_for_leaf_status": False,
+        }
+
+    def validate(self, project: str) -> dict:
+        violations: list[dict] = []
+        for node in self.list_nodes(project):
+            if node.node_type == "branch" and not self.list_decisions(project, node.id):
+                violations.append({"node_id": node.id, "rule": "branch_requires_decision"})
+            if node.node_type == "leaf" and not self.list_interfaces(project, node.id):
+                violations.append({"node_id": node.id, "rule": "leaf_requires_interface"})
+        return {"passed": len(violations) == 0, "violations": violations}
+
+    def stats(self, project: str) -> dict:
+        nodes = self.list_nodes(project)
+        total = len(nodes)
+        inferred = sum(1 for n in nodes if n.origin == "skill_inferred")
+        ratio = (inferred / total) if total else 0.0
+        return {
+            "total_nodes": total,
+            "skill_inferred_nodes": inferred,
+            "user_stated_nodes": total - inferred,
+            "skill_inferred_node_ratio": round(ratio, 4),
+        }

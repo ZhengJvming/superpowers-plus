@@ -22,6 +22,21 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
 
+## Context from Pyramid Memory
+
+If the plan is being written for a leaf from `pyramid-decomposition`, fetch its context package first:
+
+```bash
+uv run skills/memory-management/scripts/memory_cli.py memory context --node <leaf-id>
+```
+
+Use:
+- `decisions` to preserve design intent
+- `interfaces` to define task-level API shapes
+- `deps` to understand what is already stable versus what the plan must build
+
+Do not re-derive this structure from scratch if the memory package already exists.
+
 ## File Structure
 
 Before defining tasks, map out which files will be created or modified and what each one is responsible for. This is where decomposition decisions get locked in.

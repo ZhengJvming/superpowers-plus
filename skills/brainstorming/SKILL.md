@@ -31,6 +31,17 @@ You MUST create a task for each of these items and complete them in order:
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
+## Escalation: When the Requirement Is Too Big
+
+If the requirement will not fit comfortably into one design/spec cycle, switch to `pyramid-decomposition` instead of trying to force a giant brainstorm through this workflow.
+
+Typical triggers:
+- the user is asking for a whole system, platform, or large refactor
+- you would need more than a handful of files just to scope the request
+- you can already see multiple independent subsystems before asking detailed questions
+
+`pyramid-decomposition` is the correct escalation path when the core problem is structural decomposition, not local design clarity.
+
 ## Process Flow
 
 ```dot
