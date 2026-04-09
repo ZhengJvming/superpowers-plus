@@ -36,6 +36,10 @@ class MemoryStore(Protocol):
     def query_ancestors(self, project: str, node_id: str) -> list[Node]: ...
     def query_subtree(self, project: str, root_id: str) -> list[Node]: ...
     def query_deps(self, project: str, node_id: str) -> list[Node]: ...
+    def query_reverse_deps(self, project: str, node_id: str) -> list[Node]: ...
+    def query_impact_closure(
+        self, project: str, node_id: str, direction: str = "downstream"
+    ) -> list[Node]: ...
     def detect_cycles(self, project: str) -> list[list[str]]: ...
 
     def store_decision(self, decision: Decision) -> None: ...
@@ -135,6 +139,34 @@ class InMemoryStore:
     def query_deps(self, project: str, node_id: str) -> list[Node]:
         deps = [e.to_id for e in self._edges if e.kind == "dependency" and e.from_id == node_id]
         return [self.get_node(project, dep_id) for dep_id in deps]
+
+    def query_reverse_deps(self, project: str, node_id: str) -> list[Node]:
+        reverse = [e.from_id for e in self._edges if e.kind == "dependency" and e.to_id == node_id]
+        return [self.get_node(project, dep_id) for dep_id in reverse]
+
+    def query_impact_closure(
+        self, project: str, node_id: str, direction: str = "downstream"
+    ) -> list[Node]:
+        if direction not in {"downstream", "upstream"}:
+            raise StoreError(f"invalid impact direction: {direction}")
+
+        visited: set[str] = set()
+        queue = [node_id]
+        ordered: list[Node] = []
+        while queue:
+            current = queue.pop(0)
+            neighbors = (
+                self.query_deps(project, current)
+                if direction == "downstream"
+                else self.query_reverse_deps(project, current)
+            )
+            for neighbor in neighbors:
+                if neighbor.id in visited or neighbor.id == node_id:
+                    continue
+                visited.add(neighbor.id)
+                ordered.append(neighbor)
+                queue.append(neighbor.id)
+        return ordered
 
     def detect_cycles(self, project: str) -> list[list[str]]:
         adj = defaultdict(list)

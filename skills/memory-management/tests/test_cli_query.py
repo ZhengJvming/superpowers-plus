@@ -96,3 +96,61 @@ def test_query_cycles_empty(initialized):
     _seed_pyramid(initialized)
     r = initialized("query", "cycles")
     assert json.loads(r.stdout)["data"]["cycles"] == []
+
+
+def test_query_deps_of(initialized):
+    _seed_pyramid(initialized)
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "c",
+        "--name",
+        "c",
+        "--type",
+        "leaf",
+        "--level",
+        "2",
+        "--description",
+        "c",
+        "--origin",
+        "skill_inferred",
+    )
+    initialized("edge", "add", "--kind", "dependency", "--from", "a", "--to", "b")
+    initialized("edge", "add", "--kind", "dependency", "--from", "c", "--to", "b")
+    r = initialized("query", "deps-of", "--id", "b")
+    ids = {n["id"] for n in json.loads(r.stdout)["data"]["nodes"]}
+    assert ids == {"a", "c"}
+
+
+def test_query_impact_downstream(initialized):
+    _seed_pyramid(initialized)
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "c",
+        "--name",
+        "c",
+        "--type",
+        "leaf",
+        "--level",
+        "2",
+        "--description",
+        "c",
+        "--origin",
+        "skill_inferred",
+    )
+    initialized("edge", "add", "--kind", "dependency", "--from", "a", "--to", "b")
+    initialized("edge", "add", "--kind", "dependency", "--from", "b", "--to", "c")
+    r = initialized("query", "impact", "--id", "a", "--direction", "downstream")
+    ids = {n["id"] for n in json.loads(r.stdout)["data"]["nodes"]}
+    assert ids == {"b", "c"}
+
+
+def test_query_impact_upstream(initialized):
+    _seed_pyramid(initialized)
+    initialized("edge", "add", "--kind", "dependency", "--from", "a", "--to", "b")
+    r = initialized("query", "impact", "--id", "b", "--direction", "upstream")
+    ids = [n["id"] for n in json.loads(r.stdout)["data"]["nodes"]]
+    assert ids == ["a"]

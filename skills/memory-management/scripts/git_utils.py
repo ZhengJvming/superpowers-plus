@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+from collections import Counter, defaultdict
 from pathlib import Path
 
 
@@ -35,3 +36,45 @@ def compute_file_hash(file_path: Path) -> str:
         for chunk in iter(lambda: handle.read(8192), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def git_change_hotspots(project_root: Path, days: int = 90, top: int = 20) -> list[dict]:
+    """Return files ranked by commit frequency within the given period."""
+    result = subprocess.run(
+        [
+            "git",
+            "log",
+            f"--since={days} days ago",
+            "--name-only",
+            "--pretty=format:__COMMIT__|%ae",
+        ],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    counts: Counter[str] = Counter()
+    authors: dict[str, set[str]] = defaultdict(set)
+    current_author: str | None = None
+
+    for raw_line in result.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("__COMMIT__|"):
+            current_author = line.split("|", 1)[1]
+            continue
+        counts[line] += 1
+        if current_author:
+            authors[line].add(current_author)
+
+    ranked = counts.most_common(top)
+    return [
+        {
+            "path": path,
+            "commit_count": commit_count,
+            "unique_authors": len(authors[path]),
+        }
+        for path, commit_count in ranked
+    ]

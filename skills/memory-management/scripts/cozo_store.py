@@ -367,6 +367,38 @@ class CozoStore:
         )
         return [self.get_node(project, row[0]) for row in result["rows"]]
 
+    def query_reverse_deps(self, project: str, node_id: str) -> list[Node]:
+        self.ensure_schema()
+        result = self.client.run(
+            "?[from_id] := *edge_dependency{from_id, to_id: $t}",
+            {"t": node_id},
+        )
+        return [self.get_node(project, row[0]) for row in result["rows"]]
+
+    def query_impact_closure(
+        self, project: str, node_id: str, direction: str = "downstream"
+    ) -> list[Node]:
+        if direction not in {"downstream", "upstream"}:
+            raise StoreError(f"invalid impact direction: {direction}")
+
+        visited: set[str] = set()
+        queue = [node_id]
+        ordered: list[Node] = []
+        while queue:
+            current = queue.pop(0)
+            neighbors = (
+                self.query_deps(project, current)
+                if direction == "downstream"
+                else self.query_reverse_deps(project, current)
+            )
+            for neighbor in neighbors:
+                if neighbor.id in visited or neighbor.id == node_id:
+                    continue
+                visited.add(neighbor.id)
+                ordered.append(neighbor)
+                queue.append(neighbor.id)
+        return ordered
+
     def detect_cycles(self, project: str) -> list[list[str]]:
         result = self.client.run("?[from_id, to_id] := *edge_dependency{from_id, to_id}")
         adj = defaultdict(list)

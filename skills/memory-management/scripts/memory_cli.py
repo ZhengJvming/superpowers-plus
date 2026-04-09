@@ -414,6 +414,27 @@ def query_deps(node_id: str, project: str | None) -> None:
     emit({"nodes": [n.to_dict() for n in nodes]})
 
 
+@query.command("deps-of")
+@click.option("--id", "node_id", required=True)
+@click.option("--project")
+def query_deps_of(node_id: str, project: str | None) -> None:
+    store, cfg = _store()
+    p = _project(project, cfg)
+    nodes = store.query_reverse_deps(p, node_id)
+    emit({"nodes": [n.to_dict() for n in nodes]})
+
+
+@query.command("impact")
+@click.option("--id", "node_id", required=True)
+@click.option("--direction", type=click.Choice(["upstream", "downstream"]), default="downstream")
+@click.option("--project")
+def query_impact(node_id: str, direction: str, project: str | None) -> None:
+    store, cfg = _store()
+    p = _project(project, cfg)
+    nodes = store.query_impact_closure(p, node_id, direction=direction)
+    emit({"nodes": [n.to_dict() for n in nodes]})
+
+
 @query.command("cycles")
 @click.option("--project")
 def query_cycles(project: str | None) -> None:
@@ -747,6 +768,21 @@ def memory_stats(project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
     emit(store.stats(p))
+
+
+@memory.command("hotspots")
+@click.option("--days", type=int, default=90)
+@click.option("--top", type=int, default=20)
+def memory_hotspots(days: int, top: int) -> None:
+    from git_utils import git_change_hotspots
+
+    cfg = _load()
+    project_root = Path(cfg.scan_project_root) if cfg.scan_project_root else Path.cwd()
+    try:
+        hotspots = git_change_hotspots(project_root, days=days, top=top)
+    except Exception as exc:
+        emit_error(f"unable to compute git hotspots: {exc}", code="git_hotspots_failed")
+    emit({"project_root": str(project_root), "hotspots": hotspots})
 
 
 @memory.command("doctor")

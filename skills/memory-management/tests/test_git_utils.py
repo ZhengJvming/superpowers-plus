@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from scripts.git_utils import compute_file_hash, git_changed_files, git_head_sha
+from scripts.git_utils import compute_file_hash, git_change_hotspots, git_changed_files, git_head_sha
 
 
 def _init_repo(tmp_path: Path) -> Path:
@@ -47,3 +47,22 @@ def test_compute_file_hash(tmp_path):
     file_two = tmp_path / "y.txt"
     file_two.write_text("hello")
     assert compute_file_hash(file_two) == hash_value
+
+
+def test_git_change_hotspots_ranks_by_commit_frequency(tmp_path):
+    repo = _init_repo(tmp_path)
+    for i in range(3):
+        (repo / "hot.py").write_text(f"print({i})\n")
+        subprocess.run(["git", "add", "hot.py"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"hot-{i}"], cwd=repo, check=True, capture_output=True)
+
+    for i in range(2):
+        (repo / "warm.py").write_text(f"warm = {i}\n")
+        subprocess.run(["git", "add", "warm.py"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", f"warm-{i}"], cwd=repo, check=True, capture_output=True)
+
+    hotspots = git_change_hotspots(repo, days=365, top=2)
+    assert [row["path"] for row in hotspots] == ["hot.py", "warm.py"]
+    assert hotspots[0]["commit_count"] == 3
+    assert hotspots[0]["unique_authors"] == 1
+    assert hotspots[1]["commit_count"] == 2
