@@ -56,11 +56,16 @@ def test_fresh_workspace_launcher_uses_workspace_local_runtime(tmp_path):
     nested.mkdir(parents=True)
     _write_fake_uv(fake_bin)
 
-    env = {
-        **os.environ,
-        "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
-        "HOME": str(fake_home),
-    }
+    env = dict(os.environ)
+    env.pop("UV_INDEX_URL", None)
+    env.pop("UV_INDEX_STRATEGY", None)
+    env.pop("UV_CACHE_DIR", None)
+    env.update(
+        {
+            "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+            "HOME": str(fake_home),
+        }
+    )
     result = subprocess.run(
         [
             sys.executable,

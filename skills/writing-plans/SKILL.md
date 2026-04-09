@@ -20,6 +20,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 ## Scope Check
 
+Do not write a full plan for a trivially bounded change. If one direct TDD loop or one tight bugfix workflow is enough, route back to the direct implementation path instead of creating a large plan artifact.
+
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
 
 ## Context from Pyramid Memory
