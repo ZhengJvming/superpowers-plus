@@ -193,16 +193,38 @@ def node_get(node_id: str, project: str | None) -> None:
 @click.option("--status")
 @click.option("--description")
 @click.option("--tokens-estimate", type=int)
+@click.option(
+    "--criteria-confirmed",
+    is_flag=True,
+    help="Required when transitioning to status=leaf; runs mechanical checks.",
+)
 @click.option("--project")
 def node_update(
     node_id: str,
     status: str | None,
     description: str | None,
     tokens_estimate: int | None,
+    criteria_confirmed: bool,
     project: str | None,
 ) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
+
+    if status == "leaf":
+        if not criteria_confirmed:
+            emit_error(
+                "transitioning to status=leaf requires --criteria-confirmed "
+                "(run `memory check-leaf-criteria --node X` first, then re-invoke with the flag)",
+                code="criteria_not_confirmed",
+            )
+        report = store.check_leaf_criteria(p, node_id)
+        if not report["mechanical_checks_pass"]:
+            failed = [c for c in report["criteria"] if c.get("passes") is False]
+            messages = "; ".join(f"{c['criterion']}: {c['reason']}" for c in failed)
+            emit_error(
+                f"mechanical leaf criteria failed: {messages}",
+                code="criteria_failed",
+            )
 
     fields: dict[str, object] = {"updated_at": _now()}
     if status is not None:
@@ -461,6 +483,17 @@ def memory_context(node_id: str, project: str | None) -> None:
     p = _project(project, cfg)
     pkg = store.assemble_context(p, node_id)
     emit(pkg.to_dict())
+
+
+@memory.command("check-leaf-criteria")
+@click.option("--node", "node_id", required=True)
+@click.option("--project")
+def memory_check_leaf_criteria(node_id: str, project: str | None) -> None:
+    """Report all 5 independence criteria for a node."""
+    store, cfg = _store()
+    p = _project(project, cfg)
+    report = store.check_leaf_criteria(p, node_id)
+    emit(report, ok=report["mechanical_checks_pass"])
 
 
 @memory.command("validate")

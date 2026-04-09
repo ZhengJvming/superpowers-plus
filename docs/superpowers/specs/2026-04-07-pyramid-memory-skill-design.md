@@ -360,6 +360,7 @@ SKILL.md instructs the LLM: on first invocation, run `memory config show`. If ou
 - **CozoDB pre-1.0**: schema migration story is immature. Mitigation: `MemoryStore` Protocol allows swap; export/import via `memory export` for migration safety.
 - ~~**HNSW filter on `status != 'failed'`**: requires verifying CozoDB filter syntax in current release.~~ Verified 2026-04-08 with pycozo 0.7.6: `filter` clause accepted and query excluded `status='failed'` rows.
 - ~~**Embedding dimension mismatch (`<F32; 1024>` vs `bge-small-en-v1.5`)~~ Resolved 2026-04-08: use `dim=384` to match default `fastembed` model (`BAAI/bge-small-en-v1.5`). Future cloud-provider migration can add explicit reindex/migration tooling.
+- ~~**Dependency context leakage in `memory context`**~~ Resolved 2026-04-09: dependency projection is restricted to `{id, name, status}` so leaf packages only receive public dependency identity, not full internal descriptions.
 - **`tokens_estimate`**: who maintains it? Initial plan: LLM updates on `node create` based on description length × heuristic; revisit if drift hurts context-assembly accuracy.
 - **Decision dedup**: if the same decision recurs across projects, do we cross-link or duplicate? Initial plan: scope to project, allow `recall --all-projects` opt-in.
 - **Concurrent access**: two harnesses writing simultaneously. CozoDB embedded mode is single-writer; need a file lock or accept last-write-wins. Initial plan: file lock with 5s timeout, fail-fast on contention.
@@ -403,6 +404,7 @@ This spec is delivered in **two sequential plans**, each producing working, inde
 
 ### Milestone 2 — Skills + Install (Plan 2)
 **Plan file**: `docs/superpowers/plans/2026-04-07-pyramid-memory-m2-skills.md` *(written after M1 ships)*
+**Status**: Shipped 2026-04-09 (tag: `m2-pyramid-skills`)
 
 **Scope**:
 - §6 `pyramid-decomposition/SKILL.md` + `decomposition-guide.md` (5 independence criteria with examples)

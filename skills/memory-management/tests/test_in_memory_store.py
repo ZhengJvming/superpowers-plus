@@ -1,4 +1,4 @@
-from scripts.models import Decision, Edge, Node
+from scripts.models import Decision, Edge, Interface, Node
 from scripts.store import InMemoryStore
 
 
@@ -55,3 +55,52 @@ def test_recall_bm25_matches_description():
     assert len(results) >= 1
     assert results[0].node.id == "a"
     assert results[0].match_type == "bm25"
+
+
+def test_check_leaf_criteria_passes_when_complete():
+    s = InMemoryStore()
+    s.create_node(make_node("leaf", node_type="leaf"))
+    s.add_interface(
+        Interface(
+            id="i1",
+            node_id="leaf",
+            name="api",
+            description="endpoint",
+            spec="GET /x returns {y: int}",
+            created_at="2026-04-07T00:00:00Z",
+        )
+    )
+    report = s.check_leaf_criteria("demo", "leaf")
+    assert report["mechanical_checks_pass"] is True
+    c2 = next(c for c in report["criteria"] if c["criterion"] == "interface_clarity")
+    assert c2["passes"] is True
+
+
+def test_check_leaf_criteria_fails_no_interface():
+    s = InMemoryStore()
+    s.create_node(make_node("leaf", node_type="leaf"))
+    report = s.check_leaf_criteria("demo", "leaf")
+    assert report["mechanical_checks_pass"] is False
+    c2 = next(c for c in report["criteria"] if c["criterion"] == "interface_clarity")
+    assert c2["passes"] is False
+
+
+def test_check_leaf_criteria_fails_open_dep():
+    s = InMemoryStore()
+    s.create_node(make_node("leaf", node_type="leaf"))
+    s.create_node(make_node("dep", node_type="branch", status="draft"))
+    s.add_edge(Edge(kind="dependency", from_id="leaf", to_id="dep"))
+    s.add_interface(
+        Interface(
+            id="i1",
+            node_id="leaf",
+            name="x",
+            description="x",
+            spec="x" * 25,
+            created_at="2026-04-07T00:00:00Z",
+        )
+    )
+    report = s.check_leaf_criteria("demo", "leaf")
+    c5 = next(c for c in report["criteria"] if c["criterion"] == "closed_dependencies")
+    assert c5["passes"] is False
+    assert "dep" in c5["reason"]

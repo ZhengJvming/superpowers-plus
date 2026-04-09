@@ -212,3 +212,21 @@ def test_stats_inferred_ratio(store):
     assert s["total_nodes"] == 3
     assert s["skill_inferred_nodes"] == 2
     assert abs(s["skill_inferred_node_ratio"] - 0.6667) < 0.001
+
+
+def test_cozo_check_leaf_criteria_full(store):
+    store.ensure_schema()
+    store.create_node(make_node("leaf", node_type="leaf"))
+    store.add_interface(
+        Interface(
+            id="i1",
+            node_id="leaf",
+            name="api",
+            description="d",
+            spec="GET /resource returns {id, name, status}",
+            created_at="2026-04-07T00:00:00Z",
+        )
+    )
+    report = store.check_leaf_criteria("demo", "leaf")
+    assert report["mechanical_checks_pass"] is True
+    assert len(report["criteria"]) == 5

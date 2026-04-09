@@ -114,3 +114,87 @@ def test_node_delete(initialized):
     )
     r = initialized("node", "delete", "--id", "n1")
     assert json.loads(r.stdout)["ok"]
+
+
+def test_node_update_to_leaf_requires_criteria_flag(initialized):
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "n1",
+        "--name",
+        "x",
+        "--type",
+        "leaf",
+        "--level",
+        "1",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    r = initialized("node", "update", "--id", "n1", "--status", "leaf")
+    payload = json.loads(r.stdout)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "criteria_not_confirmed"
+
+
+def test_node_update_to_leaf_rejects_when_mechanical_fails(initialized):
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "n1",
+        "--name",
+        "x",
+        "--type",
+        "leaf",
+        "--level",
+        "1",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    r = initialized("node", "update", "--id", "n1", "--status", "leaf", "--criteria-confirmed")
+    payload = json.loads(r.stdout)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "criteria_failed"
+    assert "interface" in payload["error"]["message"].lower()
+
+
+def test_node_update_to_leaf_passes_when_complete(initialized):
+    initialized(
+        "node",
+        "create",
+        "--id",
+        "n1",
+        "--name",
+        "x",
+        "--type",
+        "leaf",
+        "--level",
+        "1",
+        "--description",
+        "x",
+        "--origin",
+        "user_stated",
+    )
+    initialized(
+        "interface",
+        "add",
+        "--id",
+        "i1",
+        "--node",
+        "n1",
+        "--name",
+        "api",
+        "--description",
+        "d",
+        "--spec",
+        "GET /x returns {field: type}",
+    )
+    r = initialized("node", "update", "--id", "n1", "--status", "leaf", "--criteria-confirmed")
+    payload = json.loads(r.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["status"] == "leaf"

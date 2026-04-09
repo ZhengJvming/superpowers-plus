@@ -43,6 +43,7 @@ class MemoryStore(Protocol):
 
     def recall(self, project: str, query: str, k: int, semantic: bool) -> list[ScoredNode]: ...
     def assemble_context(self, project: str, leaf_id: str) -> ContextPackage: ...
+    def check_leaf_criteria(self, project: str, node_id: str) -> dict: ...
 
     def validate(self, project: str) -> dict: ...
     def stats(self, project: str) -> dict: ...
@@ -201,9 +202,85 @@ class InMemoryStore:
             ancestors=ancestors,
             decisions=decisions,
             interfaces=interfaces,
-            deps=deps,
+            deps=[{"id": d["id"], "name": d["name"], "status": d["status"]} for d in deps],
             tokens_estimate=total_chars // 4,
         )
+
+    def check_leaf_criteria(self, project: str, node_id: str) -> dict:
+        node = self.get_node(project, node_id)
+
+        interfaces = self.list_interfaces(project, node_id)
+        c2_pass = bool(interfaces) and all(len(i.spec) >= 20 for i in interfaces)
+        c2 = {
+            "criterion": "interface_clarity",
+            "passes": c2_pass,
+            "reason": (
+                f"{len(interfaces)} interface(s), all spec >=20 chars"
+                if c2_pass
+                else (
+                    "no interface_def"
+                    if not interfaces
+                    else "at least one interface spec is too short (<20 chars)"
+                )
+            ),
+            "needs_llm_check": False,
+        }
+
+        pkg = self.assemble_context(project, node_id)
+        c4_pass = pkg.tokens_estimate <= 8000
+        c4 = {
+            "criterion": "token_budget",
+            "passes": c4_pass,
+            "reason": f"{pkg.tokens_estimate}/8000 tokens",
+            "needs_llm_check": False,
+        }
+
+        deps = self.query_deps(project, node_id)
+        open_deps: list[str] = []
+        for dep in deps:
+            dep_ifaces = self.list_interfaces(project, dep.id)
+            if dep.status not in ("leaf", "done") and not dep_ifaces:
+                open_deps.append(dep.id)
+        c5_pass = len(open_deps) == 0
+        c5 = {
+            "criterion": "closed_dependencies",
+            "passes": c5_pass,
+            "reason": (
+                "all deps stable (leaf/done OR have interface_def)"
+                if c5_pass
+                else f"unstable deps: {', '.join(open_deps)}"
+            ),
+            "needs_llm_check": False,
+        }
+
+        c1 = {
+            "criterion": "single_responsibility",
+            "passes": None,
+            "needs_llm_check": True,
+            "instruction": (
+                f"Read this node description: {node.description!r}. "
+                "Confirm it describes ONE responsibility with no 'and'/'以及'/'同时'/'plus'. "
+                "If it bundles concerns, split the node first."
+            ),
+        }
+        c3 = {
+            "criterion": "independent_testability",
+            "passes": None,
+            "needs_llm_check": True,
+            "instruction": (
+                "Confirm this leaf can be tested with mocked dependencies only. "
+                "If it requires instantiating sibling leaves to test, the boundary is wrong - "
+                "extract the shared abstraction into a new node first."
+            ),
+        }
+
+        mechanical_pass = c2["passes"] and c4["passes"] and c5["passes"]
+        return {
+            "node_id": node_id,
+            "criteria": [c1, c2, c3, c4, c5],
+            "mechanical_checks_pass": mechanical_pass,
+            "ready_for_leaf_status": False,
+        }
 
     def validate(self, project: str) -> dict:
         violations: list[dict] = []
