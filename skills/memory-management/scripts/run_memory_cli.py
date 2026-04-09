@@ -5,12 +5,22 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 try:
-    from .runtime import build_runtime_env, memory_cli_script_path, resolve_runtime_paths
+    from .runtime import (
+        build_runtime_env,
+        index_fallback_urls,
+        memory_cli_script_path,
+        resolve_runtime_paths,
+    )
 except ImportError:  # pragma: no cover - direct script execution fallback
-    from runtime import build_runtime_env, memory_cli_script_path, resolve_runtime_paths  # type: ignore[no-redef]
+    from runtime import (  # type: ignore[no-redef]
+        build_runtime_env,
+        index_fallback_urls,
+        memory_cli_script_path,
+        resolve_runtime_paths,
+    )
 
 
 def _extract_workspace_root(argv: Iterable[str]) -> tuple[Path | None, list[str]]:
@@ -46,10 +56,55 @@ def build_launcher_command(
     return cmd, env
 
 
+def should_retry_with_next_index(returncode: int, stderr: str) -> bool:
+    if returncode == 0:
+        return False
+    lowered = stderr.lower()
+    return (
+        "403 forbidden" in lowered
+        or "failed to unzip wheel" in lowered
+        or "timed out" in lowered
+        or "connection reset" in lowered
+    )
+
+
+def run_with_fallback(
+    cmd: list[str],
+    env: dict[str, str],
+    *,
+    base_environ: dict[str, str] | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> tuple[int, str, str]:
+    urls = index_fallback_urls(base_environ)
+    last = subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+    for idx, url in enumerate(urls):
+        attempt_env = dict(env)
+        attempt_env["UV_INDEX_URL"] = url
+        result = runner(cmd, env=attempt_env, capture_output=True, text=True, check=False)
+        last = result
+        if result.returncode == 0:
+            return result.returncode, result.stdout, result.stderr
+        if idx == len(urls) - 1 or not should_retry_with_next_index(result.returncode, result.stderr):
+            break
+        next_url = urls[idx + 1]
+        print(
+            f"pyramid launcher: uv failed via {url}; retrying with {next_url}",
+            file=sys.stderr,
+        )
+
+    return last.returncode, last.stdout, last.stderr
+
+
 def main(argv: list[str] | None = None) -> int:
-    cmd, env = build_launcher_command(argv or sys.argv[1:], cwd=Path.cwd(), environ=dict(os.environ))
-    result = subprocess.run(cmd, env=env)
-    return result.returncode
+    base_environ = dict(os.environ)
+    cmd, env = build_launcher_command(argv or sys.argv[1:], cwd=Path.cwd(), environ=base_environ)
+    code, stdout, stderr = run_with_fallback(cmd, env, base_environ=base_environ)
+    if stdout:
+        print(stdout, end="")
+    if stderr:
+        print(stderr, end="", file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

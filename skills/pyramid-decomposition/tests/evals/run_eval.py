@@ -55,6 +55,12 @@ def main() -> None:
             failures.append(
                 f"memory config exists={config_exists} expected {asserts['expect_memory_config']}"
             )
+    for rel_path in asserts.get("expected_paths_exist", []):
+        if not Path(rel_path).exists():
+            failures.append(f"expected path missing: {rel_path}")
+    for rel_path in asserts.get("expected_paths_absent", []):
+        if Path(rel_path).exists():
+            failures.append(f"expected path to be absent: {rel_path}")
 
     if not project_should_exist:
         if config_exists:

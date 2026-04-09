@@ -41,5 +41,6 @@
 ## Enhanced Routing Evals
 
 - `04_simple-task-no-pyramid.md`: added, pending execution on the redesign branch
+- `07_bounded-task-normal-workflow.md`: added, pending execution on the redesign branch
 - `05_large-task-escalates.md`: added, pending execution on the redesign branch
 - `06_existing-project-routing.md`: added, pending execution on the redesign branch

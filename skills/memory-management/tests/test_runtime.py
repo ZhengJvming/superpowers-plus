@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from scripts.runtime import build_runtime_env, memory_cli_script_path, resolve_runtime_paths
+from scripts.runtime import (
+    build_runtime_env,
+    index_fallback_urls,
+    memory_cli_script_path,
+    resolve_runtime_paths,
+)
 
 
 def test_resolve_runtime_paths_from_nested_git_workspace(tmp_path):
@@ -41,6 +46,20 @@ def test_build_runtime_env_sets_workspace_local_uv_defaults(tmp_path):
     assert env['UV_CACHE_DIR'] == str((workspace / '.superpowers' / 'uv-cache').resolve())
     assert env['UV_INDEX_URL'] == 'https://pypi.tuna.tsinghua.edu.cn/simple'
     assert env['UV_INDEX_STRATEGY'] == 'unsafe-best-match'
+
+
+def test_index_fallback_urls_default_to_tuna_then_aliyun_then_official():
+    assert index_fallback_urls({}) == [
+        'https://pypi.tuna.tsinghua.edu.cn/simple',
+        'https://mirrors.aliyun.com/pypi/simple/',
+        'https://pypi.org/simple',
+    ]
+
+
+def test_index_fallback_urls_respect_explicit_override():
+    assert index_fallback_urls({'UV_INDEX_URL': 'https://example.com/simple'}) == [
+        'https://example.com/simple'
+    ]
 
 
 def test_memory_cli_script_path_points_to_sibling_script():

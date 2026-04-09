@@ -25,6 +25,11 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     )
 
 DEFAULT_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+FALLBACK_INDEX_URLS = [
+    DEFAULT_INDEX_URL,
+    "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.org/simple",
+]
 DEFAULT_INDEX_STRATEGY = "unsafe-best-match"
 
 
@@ -59,6 +64,14 @@ def build_runtime_env(
     env.setdefault("UV_INDEX_STRATEGY", DEFAULT_INDEX_STRATEGY)
     env["UV_CACHE_DIR"] = str(workspace_uv_cache_dir(workspace_root))
     return env
+
+
+def index_fallback_urls(base_env: Mapping[str, str] | None = None) -> list[str]:
+    env = dict(base_env or {})
+    explicit = env.get("UV_INDEX_URL")
+    if explicit:
+        return [explicit]
+    return FALLBACK_INDEX_URLS.copy()
 
 
 def memory_cli_script_path() -> Path:

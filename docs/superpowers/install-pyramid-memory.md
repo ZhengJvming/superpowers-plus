@@ -12,9 +12,11 @@ python3 <skills-root>/memory-management/scripts/run_memory_cli.py ...
 
 The launcher already does the two things that matter in sandboxed harnesses:
 - pins `UV_CACHE_DIR` to `<workspace-root>/.superpowers/uv-cache/`
-- defaults `UV_INDEX_URL` to the Tsinghua mirror
+- defaults `UV_INDEX_URL` to the Tsinghua mirror, then retries with Aliyun and finally official PyPI if the mirror is blocked
 
 You should not need to type a long `UV_CACHE_DIR=... uv run ...` prefix during normal use.
+
+If you want to force a specific source, set `UV_INDEX_URL` explicitly before running the launcher.
 
 ## Hard Dependency: `uv`
 

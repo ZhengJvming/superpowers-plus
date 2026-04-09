@@ -20,7 +20,7 @@ python3 scripts/run_memory_cli.py ...
 The launcher:
 - resolves the workspace root
 - uses workspace-local `UV_CACHE_DIR`
-- uses the Tsinghua mirror by default
+- uses the Tsinghua mirror by default, with retry fallback to Aliyun and official PyPI
 - invokes `memory_cli.py` from the installed skill directory
 
 If you need a different repository root, pass `--workspace-root <path>` before the subcommand.

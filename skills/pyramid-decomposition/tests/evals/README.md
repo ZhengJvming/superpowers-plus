@@ -2,6 +2,7 @@
 
 These scenarios verify both routing and decomposition quality:
 - simple tasks stay out of pyramid
+- bounded multi-step tasks stay on the normal spec/plan path
 - large fuzzy tasks escalate into pyramid
 - existing-project changes trigger boundary mapping before decomposition
 
@@ -29,3 +30,4 @@ The runner reads workspace-local pyramid state from `.superpowers/pyramid-memory
 - `04_simple-task-no-pyramid.md`
 - `05_large-task-escalates.md`
 - `06_existing-project-routing.md`
+- `07_bounded-task-normal-workflow.md`
