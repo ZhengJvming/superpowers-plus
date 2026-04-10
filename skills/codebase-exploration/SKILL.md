@@ -15,6 +15,8 @@ Use this skill when:
 - `memory recall` returns nothing for a concept that should already exist in the repository
 - the user asks for a modification to an unfamiliar existing system
 - the user asks to review architecture, analyze dependencies, map the codebase, or inspect hotspots
+- working on cross-service interaction where related project memory may be needed:
+  run `memory discover`, then query related workspace context via `--workspace-root`
 
 Mode A: change preparation
 - used before decomposition or planning for an existing project change

@@ -125,6 +125,7 @@ You MUST complete each phase before proceeding to the next.
    - use `cross-module-tracing.md`
    - query upstream and downstream impact
    - identify whether the failing module is the source or only the first visible symptom
+   - if it crosses service/project boundaries, run `memory discover` and query the other workspace via `--workspace-root`
 
 ## Debugging Memory Protocol
 

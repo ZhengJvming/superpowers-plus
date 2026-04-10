@@ -113,3 +113,39 @@ def test_config_scan_section(tmp_path):
     loaded = load_config(path)
     assert loaded.scan_last_commit == "abc123"
     assert loaded.scan_project_root == "/home/user/project"
+
+
+def test_config_with_related_workspaces(tmp_path):
+    path = tmp_path / "config.toml"
+    cfg = Config(
+        initialized=True,
+        default_project="demo",
+        related_workspaces=["../payment-service", "../notification-service"],
+    )
+    save_config(path, cfg)
+    loaded = load_config(path)
+    assert loaded.related_workspaces == ["../payment-service", "../notification-service"]
+    text = path.read_text()
+    assert "[workspaces]" in text
+    assert 'related = ["../payment-service", "../notification-service"]' in text
+
+
+def test_config_without_workspaces_section(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(
+        """
+[embedding]
+provider = "skip"
+
+[storage]
+db_path = "/tmp/demo.cozo"
+
+[meta]
+initialized = true
+default_project = "demo"
+""".strip()
+        + "\n"
+    )
+    cfg = load_config(path)
+    assert cfg.default_project == "demo"
+    assert cfg.related_workspaces == []

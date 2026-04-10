@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -29,6 +29,7 @@ class Config:
     display_tree_format: str = "ascii"
     scan_last_commit: Optional[str] = None
     scan_project_root: Optional[str] = None
+    related_workspaces: list[str] = field(default_factory=list)
 
     def expanded_db_path(self) -> str:
         return str(Path(self.db_path).expanduser().resolve())
@@ -89,6 +90,7 @@ def load_config(path: Path) -> Config:
     meta = data.get("meta", {})
     display = data.get("display", {})
     scan = data.get("scan", {})
+    workspaces = data.get("workspaces", {})
 
     return Config(
         embedding_provider=embedding.get("provider", "skip"),
@@ -102,6 +104,7 @@ def load_config(path: Path) -> Config:
         display_tree_format=display.get("tree_format", "ascii"),
         scan_last_commit=scan.get("last_commit"),
         scan_project_root=scan.get("project_root"),
+        related_workspaces=[str(item) for item in workspaces.get("related", []) if str(item).strip()],
     )
 
 
@@ -145,6 +148,10 @@ def save_config(path: Path, cfg: Config) -> None:
             lines.append(f'last_commit = "{cfg.scan_last_commit}"')
         if cfg.scan_project_root:
             lines.append(f'project_root = "{cfg.scan_project_root}"')
+    if cfg.related_workspaces:
+        related = ", ".join(f'"{path}"' for path in cfg.related_workspaces if path)
+        if related:
+            lines.extend(["", "[workspaces]", f"related = [{related}]"])
 
     path.write_text("\n".join(lines) + "\n")
 

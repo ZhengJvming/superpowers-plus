@@ -46,3 +46,27 @@ def test_config_set_embedding_api_fields(initialized):
     payload = json.loads(shown.stdout)["data"]
     assert payload["embedding_api_base"] == "https://api.openai.com/v1"
     assert payload["embedding_api_key_env"] == "OPENAI_API_KEY"
+
+
+def test_config_set_related_workspaces(initialized):
+    result = initialized(
+        "config",
+        "set",
+        "--key",
+        "workspaces.related",
+        "--value",
+        "../payment-service,../notification-service",
+    )
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["data"]["updated"]["workspaces.related"] == [
+        "../payment-service",
+        "../notification-service",
+    ]
+
+    shown = initialized("config", "show")
+    shown_payload = json.loads(shown.stdout)["data"]
+    assert shown_payload["related_workspaces"] == [
+        "../payment-service",
+        "../notification-service",
+    ]

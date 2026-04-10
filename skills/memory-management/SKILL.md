@@ -152,6 +152,27 @@ python3 scripts/run_memory_cli.py memory refresh
 
 If any `file_ref` is `stale`, re-read that file before making planning or implementation decisions.
 
+## Cross-Workspace Queries
+
+When the current task interacts with other services/projects:
+
+1. Discover related workspaces:
+
+```bash
+python3 scripts/run_memory_cli.py memory discover
+```
+
+2. Query another workspace memory with `--workspace-root`:
+
+```bash
+python3 scripts/run_memory_cli.py --workspace-root <path> memory recall --query "..."
+python3 scripts/run_memory_cli.py --workspace-root <path> interface list --node <id>
+python3 scripts/run_memory_cli.py --workspace-root <path> memory tree
+```
+
+3. Treat cross-workspace access as read-only. Do not modify another workspace's memory unless the user explicitly asks.
+4. If another workspace has no memory yet, suggest initializing memory there (or running codebase-exploration first).
+
 ## Pre-Decision Recall Gate
 
 Before any of these actions:

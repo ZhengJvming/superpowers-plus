@@ -63,3 +63,24 @@ def test_pyramid_decomposition_phase3_mentions_embedding_threshold():
     text = _read("pyramid-decomposition")
     assert "total nodes > 50" in text
     assert "embedding provider is `skip`" in text
+
+
+def test_memory_management_documents_cross_workspace_queries():
+    text = _read("memory-management")
+    assert "Cross-Workspace Queries" in text
+    assert "memory discover" in text
+    assert "--workspace-root" in text
+    assert "read-only" in text
+
+
+def test_codebase_exploration_mentions_cross_service_query_flow():
+    text = _read("codebase-exploration")
+    assert "cross-service interaction" in text
+    assert "memory discover" in text
+    assert "--workspace-root" in text
+
+
+def test_systematic_debugging_mentions_cross_project_memory_lookup():
+    text = _read("systematic-debugging")
+    assert "service/project boundaries" in text
+    assert "memory discover" in text

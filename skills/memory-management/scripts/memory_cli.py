@@ -16,7 +16,14 @@ from typing import Iterable
 
 import click
 
-from config import Config, default_config_path, default_db_path, load_config, save_config
+from config import (
+    Config,
+    default_config_path,
+    default_db_path,
+    load_config,
+    resolve_workspace_root,
+    save_config,
+)
 from output import emit, emit_error
 
 VERSION = "0.1.0-m1"
@@ -34,6 +41,14 @@ def _config_path() -> Path:
 
 def _load() -> Config:
     return load_config(_config_path())
+
+
+def _workspace_root() -> Path:
+    return resolve_workspace_root(explicit_root=WORKSPACE_ROOT_OVERRIDE)
+
+
+def _workspace_config_path(root: Path) -> Path:
+    return root / ".superpowers" / "pyramid-memory" / "config.toml"
 
 
 def _build_provider_from_cfg(cfg: Config):
@@ -228,6 +243,7 @@ def config_show() -> None:
             "display_tree_format": cfg.display_tree_format,
             "scan_last_commit": cfg.scan_last_commit,
             "scan_project_root": cfg.scan_project_root,
+            "related_workspaces": cfg.related_workspaces,
         }
     )
 
@@ -258,6 +274,7 @@ def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]
         "display.tree_format",
         "scan.last_commit",
         "scan.project_root",
+        "workspaces.related",
     }:
         emit_error(f"unknown config key: {key}")
     if key == "embedding_provider":
@@ -296,6 +313,10 @@ def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]
     elif key == "scan.project_root":
         cfg.scan_project_root = str(Path(value).expanduser().resolve())
         value = cfg.scan_project_root
+    elif key == "workspaces.related":
+        entries = [item.strip() for item in value.split(",")]
+        cfg.related_workspaces = [item for item in entries if item]
+        value = cfg.related_workspaces
     else:
         setattr(cfg, key, value)
     save_config(_config_path(), cfg)
@@ -870,6 +891,64 @@ def memory_stats(project: str | None) -> None:
     store, cfg = _store()
     p = _project(project, cfg)
     emit(store.stats(p))
+
+
+@memory.command("discover")
+def memory_discover() -> None:
+    current_root = _workspace_root()
+    current_cfg = _load()
+
+    siblings: list[dict] = []
+    seen: set[str] = set()
+
+    def _append_workspace(path: Path) -> None:
+        resolved = path.expanduser().resolve()
+        key = str(resolved)
+        if key == str(current_root) or key in seen:
+            return
+        cfg_path = _workspace_config_path(resolved)
+        if cfg_path.exists():
+            cfg = load_config(cfg_path)
+            siblings.append(
+                {
+                    "path": key,
+                    "project": cfg.default_project,
+                    "initialized": cfg.initialized,
+                }
+            )
+            seen.add(key)
+            return
+        siblings.append({"path": key, "project": None, "initialized": False})
+        seen.add(key)
+
+    for item in current_cfg.related_workspaces:
+        configured = Path(item)
+        if not configured.is_absolute():
+            configured = current_root / configured
+        _append_workspace(configured)
+
+    parent_dir = current_root.parent
+    try:
+        for candidate in sorted(parent_dir.iterdir(), key=lambda p: p.name):
+            if not candidate.is_dir():
+                continue
+            cfg_path = _workspace_config_path(candidate)
+            if not cfg_path.exists():
+                continue
+            _append_workspace(candidate)
+    except FileNotFoundError:
+        pass
+
+    emit(
+        {
+            "current": {
+                "path": str(current_root),
+                "project": current_cfg.default_project,
+                "initialized": current_cfg.initialized,
+            },
+            "siblings": siblings,
+        }
+    )
 
 
 @memory.command("hotspots")
