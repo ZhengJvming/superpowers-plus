@@ -78,6 +78,41 @@ python3 scripts/run_memory_cli.py memory freshness
 | Stats | `python3 scripts/run_memory_cli.py memory stats` |
 | Export | `python3 scripts/run_memory_cli.py memory export` |
 
+## Embedding 配置建议
+
+当 `memory stats` 显示 `total_nodes > 50` 且 `config show` 显示 `embedding_provider = skip` 时，提醒用户一次：
+
+> 当前项目已有 N 个节点。节点较多时 BM25 关键词召回可能不够精确，建议配置 embedding 以启用语义搜索。
+
+只建议，不要自动替用户启用。
+
+OpenAI:
+
+```bash
+python3 scripts/run_memory_cli.py config set --key embedding_provider --value openai_compatible
+python3 scripts/run_memory_cli.py config set --key embedding.model --value text-embedding-3-small
+python3 scripts/run_memory_cli.py config set --key embedding.api_base --value https://api.openai.com/v1
+python3 scripts/run_memory_cli.py config set --key embedding.api_key_env --value OPENAI_API_KEY
+```
+
+DashScope (OpenAI-compatible):
+
+```bash
+python3 scripts/run_memory_cli.py config set --key embedding_provider --value openai_compatible
+python3 scripts/run_memory_cli.py config set --key embedding.model --value text-embedding-v3
+python3 scripts/run_memory_cli.py config set --key embedding.api_base --value https://dashscope.aliyuncs.com/compatible-mode/v1
+python3 scripts/run_memory_cli.py config set --key embedding.api_key_env --value DASHSCOPE_API_KEY
+```
+
+Silicon Flow (OpenAI-compatible):
+
+```bash
+python3 scripts/run_memory_cli.py config set --key embedding_provider --value openai_compatible
+python3 scripts/run_memory_cli.py config set --key embedding.model --value BAAI/bge-m3
+python3 scripts/run_memory_cli.py config set --key embedding.api_base --value https://api.siliconflow.cn/v1
+python3 scripts/run_memory_cli.py config set --key embedding.api_key_env --value SILICONFLOW_API_KEY
+```
+
 ## Leaf Package Rule
 
 Before planning or implementing one leaf:

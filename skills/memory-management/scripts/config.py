@@ -19,6 +19,10 @@ UV_CACHE_DIR = SUPERPOWERS_DIR / "uv-cache"
 @dataclass
 class Config:
     embedding_provider: str = "skip"
+    embedding_model: str = ""
+    embedding_dim: int = 384
+    embedding_api_base: str = ""
+    embedding_api_key_env: str = ""
     db_path: str = str(PYRAMID_MEMORY_DIR / "data.cozo")
     default_project: Optional[str] = None
     initialized: bool = False
@@ -88,6 +92,10 @@ def load_config(path: Path) -> Config:
 
     return Config(
         embedding_provider=embedding.get("provider", "skip"),
+        embedding_model=embedding.get("model", ""),
+        embedding_dim=int(embedding.get("dim", 384)),
+        embedding_api_base=embedding.get("api_base", ""),
+        embedding_api_key_env=embedding.get("api_key_env", ""),
         db_path=storage.get("db_path", str(default_db)),
         default_project=meta.get("default_project"),
         initialized=meta.get("initialized", False),
@@ -103,13 +111,25 @@ def save_config(path: Path, cfg: Config) -> None:
     lines = [
         "[embedding]",
         f'provider = "{cfg.embedding_provider}"',
-        "",
-        "[storage]",
-        f'db_path = "{cfg.db_path}"',
-        "",
-        "[meta]",
-        f"initialized = {'true' if cfg.initialized else 'false'}",
     ]
+    if cfg.embedding_model:
+        lines.append(f'model = "{cfg.embedding_model}"')
+    if cfg.embedding_dim != 384:
+        lines.append(f"dim = {cfg.embedding_dim}")
+    if cfg.embedding_api_base:
+        lines.append(f'api_base = "{cfg.embedding_api_base}"')
+    if cfg.embedding_api_key_env:
+        lines.append(f'api_key_env = "{cfg.embedding_api_key_env}"')
+    lines.extend(
+        [
+            "",
+            "[storage]",
+            f'db_path = "{cfg.db_path}"',
+            "",
+            "[meta]",
+            f"initialized = {'true' if cfg.initialized else 'false'}",
+        ]
+    )
     if cfg.default_project:
         lines.append(f'default_project = "{cfg.default_project}"')
     lines.extend(

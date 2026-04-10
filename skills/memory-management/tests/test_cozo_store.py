@@ -2,6 +2,7 @@ import pytest
 
 from scripts.cozo_store import CozoStore
 from scripts.models import Node
+from scripts.store import StoreError
 
 
 @pytest.fixture
@@ -230,3 +231,17 @@ def test_cozo_check_leaf_criteria_full(store):
     report = store.check_leaf_criteria("demo", "leaf")
     assert report["mechanical_checks_pass"] is True
     assert len(report["criteria"]) == 5
+
+
+def test_schema_uses_custom_dim(tmp_path):
+    store = CozoStore(db_path=str(tmp_path / "custom.cozo"), dim=512)
+    store.ensure_schema()
+    meta = store.client.run("?[value] := *config{key, value}, key = 'embedding_dim'")
+    assert meta["rows"] == [["512"]]
+
+
+def test_schema_dim_mismatch_raises(tmp_path):
+    db_path = tmp_path / "mismatch.cozo"
+    CozoStore(db_path=str(db_path), dim=384).ensure_schema()
+    with pytest.raises(StoreError, match="embedding dim mismatch"):
+        CozoStore(db_path=str(db_path), dim=512).ensure_schema()

@@ -168,6 +168,9 @@ python3 ../memory-management/scripts/run_memory_cli.py memory validate
 python3 ../memory-management/scripts/run_memory_cli.py memory stats
 ```
 
+If total nodes > 50 and embedding provider is `skip`, suggest enabling embedding before leaf handoff.
+Do not auto-enable it; ask the user to decide.
+
 When the pyramid is ready, hand off one leaf at a time:
 
 ```bash

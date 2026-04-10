@@ -12,8 +12,8 @@ except ImportError:
     from models import ContextPackage, Decision, Edge, FileRef, Interface, Node, ScoredNode
     from store import NodeNotFound, StoreError
 
-SCHEMA_RELATIONS = [
-    """:create node {
+def _node_schema(dim: int) -> str:
+    return f""":create node {{
         id: String,
         project: String,
         =>
@@ -26,19 +26,24 @@ SCHEMA_RELATIONS = [
         tokens_estimate: Int default 0,
         created_at: String,
         updated_at: String,
-        embedding: <F32; 384>?
-    }""",
-    """:create edge_hierarchy {
+        embedding: <F32; {dim}>?
+    }}"""
+
+
+def _schema_relations(dim: int) -> list[str]:
+    return [
+        _node_schema(dim),
+        """:create edge_hierarchy {
         parent_id: String,
         child_id: String,
         order_idx: Int default 0
     }""",
-    """:create edge_dependency {
+        """:create edge_dependency {
         from_id: String,
         to_id: String,
         dep_type: String default 'requires'
     }""",
-    """:create decision {
+        """:create decision {
         id: String,
         node_id: String,
         question: String,
@@ -48,7 +53,7 @@ SCHEMA_RELATIONS = [
         tradeoffs: String,
         created_at: String
     }""",
-    """:create interface_def {
+        """:create interface_def {
         id: String,
         node_id: String,
         name: String,
@@ -56,7 +61,7 @@ SCHEMA_RELATIONS = [
         spec: String,
         created_at: String
     }""",
-    """:create file_ref {
+        """:create file_ref {
         id: String,
         =>
         node_id: String,
@@ -67,26 +72,29 @@ SCHEMA_RELATIONS = [
         scanned_at: String,
         status: String
     }""",
-    """:create config {
+        """:create config {
         key: String,
         value: String
     }""",
-]
+    ]
 
-HNSW_INDEX = """::hnsw create node:embedding_idx {
-    dim: 384,
+
+def _hnsw_index(dim: int) -> str:
+    return f"""::hnsw create node:embedding_idx {{
+    dim: {dim},
     m: 16,
     ef_construction: 200,
     fields: [embedding],
     distance: Cosine,
     filter: status != 'failed'
-}"""
+}}"""
 
 
 class CozoStore:
-    def __init__(self, db_path: str, embedding_provider=None):
+    def __init__(self, db_path: str, embedding_provider=None, dim: int = 384):
         self.db_path = db_path
         self.embedding_provider = embedding_provider
+        self.dim = int(dim)
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.client = Client("sqlite", db_path, dataframe=False)
         self._schema_ready = False
@@ -96,13 +104,31 @@ class CozoStore:
             return
 
         existing = {row[0] for row in self.client.run("::relations")["rows"]}
-        for stmt in SCHEMA_RELATIONS:
+        for stmt in _schema_relations(self.dim):
             relation_name = stmt.split("{", 1)[0].split()[-1]
             if relation_name not in existing:
                 self.client.run(stmt)
 
+        config_dim = self.client.run(
+            "?[value] := *config{key, value}, key = 'embedding_dim'"
+        )["rows"]
+        if config_dim:
+            existing_dim = int(config_dim[0][0])
+            if existing_dim != self.dim:
+                raise StoreError(
+                    f"embedding dim mismatch: existing schema uses {existing_dim}, requested {self.dim}"
+                )
+        else:
+            self.client.run(
+                """
+                ?[key, value] <- [['embedding_dim', $dim]]
+                :put config {key, value}
+                """,
+                {"dim": str(self.dim)},
+            )
+
         try:
-            self.client.run(HNSW_INDEX)
+            self.client.run(_hnsw_index(self.dim))
         except Exception:
             pass
 
@@ -548,6 +574,8 @@ class CozoStore:
             try:
                 qvec = self.embedding_provider.embed([query])[0]
                 if qvec is not None:
+                    if self.dim > 0 and len(qvec) > self.dim:
+                        qvec = qvec[: self.dim]
                     result = self.client.run(
                         """
                         ?[dist, id, project, name, node_type, level, description, status, origin,
@@ -601,6 +629,8 @@ class CozoStore:
             vector = self.embedding_provider.embed([text])[0]
             if vector is None:
                 return None
+            if self.dim > 0 and len(vector) > self.dim:
+                vector = vector[: self.dim]
             return [float(x) for x in vector]
         except Exception:
             return None

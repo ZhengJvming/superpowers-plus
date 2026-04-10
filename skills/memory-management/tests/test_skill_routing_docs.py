@@ -50,3 +50,16 @@ def test_codebase_exploration_supports_standalone_review_mode():
     assert "standalone architecture review" in text
     assert "dependency" in text
     assert "hotspots" in text
+
+
+def test_memory_management_has_embedding_scale_guidance():
+    text = _read("memory-management")
+    assert "Embedding 配置建议" in text
+    assert "total_nodes > 50" in text
+    assert "openai_compatible" in text
+
+
+def test_pyramid_decomposition_phase3_mentions_embedding_threshold():
+    text = _read("pyramid-decomposition")
+    assert "total nodes > 50" in text
+    assert "embedding provider is `skip`" in text

@@ -10,6 +10,7 @@
 """Pyramid Memory CLI - Milestone 1 (storage + CLI)."""
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -35,21 +36,36 @@ def _load() -> Config:
     return load_config(_config_path())
 
 
+def _build_provider_from_cfg(cfg: Config):
+    from embedding import get_provider
+
+    return get_provider(
+        cfg.embedding_provider,
+        model=cfg.embedding_model,
+        dim=cfg.embedding_dim,
+        api_base=cfg.embedding_api_base,
+        api_key_env=cfg.embedding_api_key_env,
+    )
+
+
 def _store():
     cfg = _load()
     if not cfg.initialized:
         emit_error("not initialized - run `memory_cli.py init` first", code="uninitialized")
 
     from cozo_store import CozoStore
-    from embedding import get_provider
 
     provider = None
     try:
-        provider = get_provider(cfg.embedding_provider)
+        provider = _build_provider_from_cfg(cfg)
     except Exception:
         provider = None
 
-    store = CozoStore(db_path=cfg.expanded_db_path(), embedding_provider=provider)
+    store = CozoStore(
+        db_path=cfg.expanded_db_path(),
+        embedding_provider=provider,
+        dim=cfg.embedding_dim,
+    )
     store.ensure_schema()
     return store, cfg
 
@@ -101,9 +117,13 @@ def version() -> None:
 @click.option("--project", required=True, help="Default project name (namespace).")
 @click.option(
     "--embedding",
-    type=click.Choice(["skip", "fastembed", "voyage", "openai", "ollama"]),
+    type=click.Choice(["skip", "openai_compatible", "fastembed"]),
     default="skip",
 )
+@click.option("--embedding-model", default="")
+@click.option("--embedding-dim", type=int, default=384)
+@click.option("--embedding-api-base", default="")
+@click.option("--embedding-api-key-env", default="")
 @click.option(
     "--db-path",
     type=click.Path(path_type=Path, dir_okay=False, resolve_path=True),
@@ -111,20 +131,64 @@ def version() -> None:
     help="Override database file path. Defaults to <workspace-root>/.superpowers/pyramid-memory/data.cozo.",
 )
 @click.option("--non-interactive", is_flag=True, help="Skip prompts (for tests/scripts).")
-def init(project: str, embedding: str, db_path: Path | None, non_interactive: bool) -> None:
+def init(
+    project: str,
+    embedding: str,
+    embedding_model: str,
+    embedding_dim: int,
+    embedding_api_base: str,
+    embedding_api_key_env: str,
+    db_path: Path | None,
+    non_interactive: bool,
+) -> None:
     """Initialize the pyramid memory store."""
+    _ = non_interactive
+    if embedding_dim <= 0:
+        emit_error("embedding-dim must be > 0", code="invalid_embedding_dim")
+
     resolved_db_path = db_path or default_db_path(workspace_root=WORKSPACE_ROOT_OVERRIDE)
+    if embedding == "openai_compatible":
+        if not embedding_model:
+            embedding_model = "text-embedding-3-small"
+        if not embedding_api_base:
+            embedding_api_base = "https://api.openai.com/v1"
+        if not embedding_api_key_env:
+            embedding_api_key_env = "OPENAI_API_KEY"
+    if embedding == "fastembed" and not embedding_model:
+        embedding_model = "BAAI/bge-small-en-v1.5"
+
     cfg = Config(
         embedding_provider=embedding,
+        embedding_model=embedding_model,
+        embedding_dim=embedding_dim,
+        embedding_api_base=embedding_api_base,
+        embedding_api_key_env=embedding_api_key_env,
         db_path=str(resolved_db_path),
         default_project=project,
         initialized=True,
     )
-    save_config(_config_path(), cfg)
 
     from cozo_store import CozoStore
 
-    store = CozoStore(db_path=cfg.expanded_db_path())
+    provider = None
+    init_warnings: list[str] = []
+    if embedding == "openai_compatible":
+        try:
+            provider = _build_provider_from_cfg(cfg)
+            probe = provider.embed(["healthcheck"])[0]
+            if probe is None:
+                emit_error("embedding health check failed", code="embedding_healthcheck_failed")
+        except Exception as exc:
+            emit_error(f"embedding health check failed: {exc}", code="embedding_healthcheck_failed")
+    elif embedding == "fastembed":
+        try:
+            provider = _build_provider_from_cfg(cfg)
+        except Exception as exc:
+            init_warnings.append(f"fastembed unavailable during init: {exc}")
+            provider = None
+
+    save_config(_config_path(), cfg)
+    store = CozoStore(db_path=cfg.expanded_db_path(), embedding_provider=provider, dim=cfg.embedding_dim)
     store.ensure_schema()
 
     emit(
@@ -132,8 +196,13 @@ def init(project: str, embedding: str, db_path: Path | None, non_interactive: bo
             "initialized": True,
             "project": project,
             "embedding": embedding,
+            "embedding_model": cfg.embedding_model,
+            "embedding_dim": cfg.embedding_dim,
+            "embedding_api_base": cfg.embedding_api_base,
+            "embedding_api_key_env": cfg.embedding_api_key_env,
             "db_path": cfg.expanded_db_path(),
-        }
+        },
+        warnings=init_warnings,
     )
 
 
@@ -150,6 +219,10 @@ def config_show() -> None:
         {
             "initialized": cfg.initialized,
             "embedding_provider": cfg.embedding_provider,
+            "embedding_model": cfg.embedding_model,
+            "embedding_dim": cfg.embedding_dim,
+            "embedding_api_base": cfg.embedding_api_base,
+            "embedding_api_key_env": cfg.embedding_api_key_env,
             "db_path": cfg.expanded_db_path(),
             "default_project": cfg.default_project,
             "display_tree_format": cfg.display_tree_format,
@@ -173,8 +246,13 @@ def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]
         emit_error("config set requires key and value", code="invalid_config_args")
 
     cfg = _load()
+    warnings: list[str] = []
     if key not in {
         "embedding_provider",
+        "embedding.model",
+        "embedding.dim",
+        "embedding.api_base",
+        "embedding.api_key_env",
         "default_project",
         "db_path",
         "display.tree_format",
@@ -182,7 +260,31 @@ def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]
         "scan.project_root",
     }:
         emit_error(f"unknown config key: {key}")
-    if key == "db_path":
+    if key == "embedding_provider":
+        if value not in {"skip", "openai_compatible", "fastembed"}:
+            emit_error(
+                "embedding_provider must be one of: skip, openai_compatible, fastembed",
+                code="invalid_config_value",
+            )
+        cfg.embedding_provider = value
+    elif key == "embedding.model":
+        cfg.embedding_model = value
+    elif key == "embedding.dim":
+        try:
+            parsed = int(value)
+        except ValueError:
+            emit_error("embedding.dim must be an integer", code="invalid_config_value")
+        if parsed <= 0:
+            emit_error("embedding.dim must be > 0", code="invalid_config_value")
+        cfg.embedding_dim = parsed
+        value = parsed
+        warnings.append("embedding.dim changed; run memory reindex (or re-init) to rebuild vector index")
+    elif key == "embedding.api_base":
+        cfg.embedding_api_base = value.rstrip("/")
+        value = cfg.embedding_api_base
+    elif key == "embedding.api_key_env":
+        cfg.embedding_api_key_env = value
+    elif key == "db_path":
         value = str(Path(value).expanduser().resolve())
         setattr(cfg, key, value)
     elif key == "display.tree_format":
@@ -197,7 +299,7 @@ def config_set(key_opt: str | None, value_opt: str | None, args: tuple[str, ...]
     else:
         setattr(cfg, key, value)
     save_config(_config_path(), cfg)
-    emit({"updated": {key: value}})
+    emit({"updated": {key: value}}, warnings=warnings)
 
 
 @cli.group()
@@ -791,6 +893,7 @@ def memory_doctor() -> None:
     cfg = _load()
     db_ok = False
     embedding_ok = cfg.embedding_provider == "skip"
+    embedding_api_key_configured = bool(cfg.embedding_api_key_env and os.environ.get(cfg.embedding_api_key_env))
     notes: list[str] = []
 
     if not cfg.initialized:
@@ -799,18 +902,18 @@ def memory_doctor() -> None:
         try:
             from cozo_store import CozoStore
 
-            CozoStore(db_path=cfg.expanded_db_path()).ensure_schema()
+            CozoStore(db_path=cfg.expanded_db_path(), dim=cfg.embedding_dim).ensure_schema()
             db_ok = True
         except Exception as exc:
             notes.append(f"db error: {exc}")
 
         if cfg.embedding_provider != "skip":
             try:
-                from embedding import get_provider
-
-                provider = get_provider(cfg.embedding_provider)
-                provider.embed(["healthcheck"])
-                embedding_ok = True
+                provider = _build_provider_from_cfg(cfg)
+                probe = provider.embed(["healthcheck"])[0]
+                embedding_ok = probe is not None
+                if not embedding_ok:
+                    notes.append("embedding healthcheck returned empty vector")
             except Exception as exc:
                 notes.append(f"embedding error: {exc}")
 
@@ -819,6 +922,10 @@ def memory_doctor() -> None:
             "initialized": cfg.initialized,
             "db_ok": db_ok,
             "embedding_provider": cfg.embedding_provider,
+            "embedding_model": cfg.embedding_model,
+            "embedding_dim": cfg.embedding_dim,
+            "embedding_api_base": cfg.embedding_api_base,
+            "embedding_api_key_configured": embedding_api_key_configured,
             "embedding_ok": embedding_ok,
             "notes": notes,
         }
