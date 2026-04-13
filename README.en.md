@@ -8,7 +8,7 @@ Superpowers-Plus is a structured workflow skill system designed for AI programmi
 
 > **Note**: This project is an enhanced version of [Superpowers](https://github.com/obra/superpowers), adding Pyramid Decomposition and Memory Management systems, specifically designed to handle complex, cross-session large-scale engineering tasks.
 
----
+***
 
 ## 🚀 Quick Start
 
@@ -16,7 +16,7 @@ Superpowers-Plus is a structured workflow skill system designed for AI programmi
 
 Superpowers-Plus supports multiple AI programming assistant platforms. Choose your platform and follow the installation steps below:
 
----
+***
 
 #### Claude Code
 
@@ -44,13 +44,14 @@ echo '{"plugins": ["~/coding/superpowers-plus"]}' > .claude/plugins.json
 ```
 
 **Verify Installation**:
+
 ```
 Tell Claude Code: "List your skills"
 ```
 
 You should see skills like `using-superpowers`, `brainstorming`, `pyramid-decomposition`, etc.
 
----
+***
 
 #### Cursor
 
@@ -76,11 +77,12 @@ git clone https://github.com/jimmy/superpowers-plus.git .cursor/plugins/superpow
 ```
 
 **Verify Installation**:
+
 ```
 Type in Cursor: "What development skills do you have?"
 ```
 
----
+***
 
 #### OpenAI Codex
 
@@ -103,11 +105,12 @@ ln -s ~/.codex/superpowers-plus/skills ~/.agents/skills/superpowers-plus
 ```
 
 **Verify Installation**:
+
 ```bash
 ls -la ~/.agents/skills/superpowers-plus
 ```
 
----
+***
 
 #### OpenCode
 
@@ -124,11 +127,12 @@ Add to `opencode.json` in your project root:
 Restart OpenCode, and the plugin will install automatically.
 
 **Verify Installation**:
+
 ```
 Use skill tool to list skills
 ```
 
----
+***
 
 #### Other Platforms
 
@@ -142,7 +146,7 @@ git clone https://github.com/jimmy/superpowers-plus.git <platform-dir>/superpowe
 # Usually needs to point to skills/ directory
 ```
 
----
+***
 
 ### Initialize Pyramid Memory System (Optional)
 
@@ -156,7 +160,7 @@ python3 <skill-path>/memory-management/scripts/run_memory_cli.py init \
 
 Memory is stored at `<project-root>/.superpowers/pyramid-memory/` — a single SQLite file. Remember to add `.superpowers/` to `.gitignore`.
 
----
+***
 
 ## ✨ Core Features
 
@@ -195,22 +199,24 @@ Persistent memory based on CozoDB graph database:
 
 Automatically select the most suitable workflow based on task characteristics:
 
-| Task Type | Route | Example |
-|-----------|-------|---------|
-| **Simple/Local** | `systematic-debugging` or `test-driven-development` | "Fix null pointer", "Add helper function" |
-| **Bounded Multi-Step** | `brainstorming` → `writing-plans` → `subagent-driven-development` | "Add OAuth login", "Refactor config parser" |
-| **Large/Fuzzy** | `pyramid-decomposition` → leaf handoff → `writing-plans` | "Build payment system", "Redesign data layer" |
-| **Analytical/Review** | `codebase-exploration` (standalone) | "Review architecture", "Map dependencies" |
+| Task Type              | Route                                                             | Example                                       |
+| ---------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
+| **Simple/Local**       | `systematic-debugging` or `test-driven-development`               | "Fix null pointer", "Add helper function"     |
+| **Bounded Multi-Step** | `brainstorming` → `writing-plans` → `subagent-driven-development` | "Add OAuth login", "Refactor config parser"   |
+| **Large/Fuzzy**        | `pyramid-decomposition` → leaf handoff → `writing-plans`          | "Build payment system", "Redesign data layer" |
+| **Analytical/Review**  | `codebase-exploration` (standalone)                               | "Review architecture", "Map dependencies"     |
 
----
+***
 
 ## 📚 Skill Catalog
 
 ### Routing Layer
+
 - **using-superpowers** — Entry router. Classifies tasks, dispatches to correct workflow.
 - **writing-skills** — Meta-skill for authoring and testing new skills.
 
 ### Core Workflow Layer
+
 - **brainstorming** — Turns fuzzy ideas into validated designs through Socratic dialogue.
 - **pyramid-decomposition** — BFS decomposition of large requirements into independence-qualified leaves.
 - **codebase-exploration** — Maps existing codebases: module structure, dependency graphs, change hotspots, architecture patterns.
@@ -220,6 +226,7 @@ Automatically select the most suitable workflow based on task characteristics:
 - **executing-plans** — Alternative execution for environments without subagent support.
 
 ### Discipline Layer
+
 - **test-driven-development** — Strict RED-GREEN-REFACTOR. No production code without a failing test.
 - **systematic-debugging** — Four-phase root cause investigation. Cross-module tracing via dependency graph.
 - **verification-before-completion** — Evidence before claims, always.
@@ -228,7 +235,7 @@ Automatically select the most suitable workflow based on task characteristics:
 - **using-git-worktrees** — Isolated development branches.
 - **dispatching-parallel-agents** — Concurrent investigation of independent problems.
 
----
+***
 
 ## 🎯 Design Philosophy
 
@@ -239,9 +246,7 @@ Most coding agents fail the same way: they jump straight into writing code. Smal
 Three root causes:
 
 1. **Context Collapse** — The context window is finite. For any non-trivial system, the full design + code + decisions cannot fit. Subagents re-derive context from scratch. Decisions evaporate between sessions.
-
-2. **Users Cannot Articulate Complete Designs Upfront** — Requirements start fuzzy ("build me a payment system"). Ad-hoc Q&A produces inconsistent specs. The agent fills gaps with assumptions that surface as bugs weeks later.
-
+2. **Users Cannot Articulate Complete Designs Upfront** — Requirements start fuzzy ("build me a payment system"). Ad-hoc Q\&A produces inconsistent specs. The agent fills gaps with assumptions that surface as bugs weeks later.
 3. **Decomposition Stops Too Early** — Without a forcing function, agents split work into chunks that are still too coarse. Responsibilities overlap. Hidden coupling sneaks in. Parallel subagents collide on shared state and produce code that won't compose.
 
 ### The Superpowers Approach
@@ -251,12 +256,10 @@ Three root causes:
 The system enforces three invariants:
 
 - **No Code Without Design** — Every implementation starts from an approved spec. The agent asks micro-questions, proposes alternatives with trade-offs, and presents designs in digestible sections. You never write a spec — you confirm or reject one.
-
 - **No Leaf Without Independence** — Every unit of work must pass five criteria (single responsibility, interface clarity, independent testability, token budget, closed dependencies) before implementation begins. Failing any criterion forces further decomposition until coupling disappears.
-
 - **No Claim Without Evidence** — "Should work" is not allowed. Every completion claim requires a fresh verification command, full output read, and confirmed result. The agent cannot express satisfaction before running the test.
 
----
+***
 
 ## 📖 Methodology
 
@@ -279,15 +282,15 @@ Each stage has **hard gates** — you cannot proceed without satisfying the exit
 
 A node becomes a leaf only when it passes all five:
 
-| Criterion | How It's Checked | What It Prevents |
-|-----------|-----------------|------------------|
-| **Single Responsibility** | LLM judgment | God-modules that do too many things |
-| **Interface Clarity** | At least one published interface | Implicit contracts that break under change |
-| **Independent Testability** | LLM judgment | Units that can't be verified in isolation |
-| **Token Budget** | Context package < 8000 tokens | Leaves too large for a subagent to hold in context |
-| **Closed Dependencies** | All deps are explicit graph edges | Hidden coupling that causes integration failures |
+| Criterion                   | How It's Checked                  | What It Prevents                                   |
+| --------------------------- | --------------------------------- | -------------------------------------------------- |
+| **Single Responsibility**   | LLM judgment                      | God-modules that do too many things                |
+| **Interface Clarity**       | At least one published interface  | Implicit contracts that break under change         |
+| **Independent Testability** | LLM judgment                      | Units that can't be verified in isolation          |
+| **Token Budget**            | Context package < 8000 tokens     | Leaves too large for a subagent to hold in context |
+| **Closed Dependencies**     | All deps are explicit graph edges | Hidden coupling that causes integration failures   |
 
----
+***
 
 ## 🧠 Memory Architecture
 
@@ -313,7 +316,7 @@ The persistent memory system solves context collapse:
 
 When a subagent needs context for a leaf, it gets exactly what it needs — the node, its ancestor chain, relevant decisions, interfaces, dependencies, and file references — in a bounded package. Not the whole pyramid. Not the whole codebase. Just the minimum sufficient context.
 
----
+***
 
 ## 💡 Technical Highlights
 
@@ -328,8 +331,9 @@ All CLI scripts are self-contained Python scripts using PEP 723 dependency decla
 ```
 
 **Advantages**:
+
 - No global installation required, dependencies managed automatically via `uv` runtime
-- Workspace-level UV_CACHE_DIR isolation
+- Workspace-level UV\_CACHE\_DIR isolation
 - Built-in mirror fallback (Tsinghua → Aliyun → PyPI)
 
 ### Protocol-Based Storage Layer
@@ -346,7 +350,7 @@ class MemoryStore(Protocol):
 - CozoStore: Production-grade persistent storage
 ```
 
----
+***
 
 ## 🔄 Updating
 
@@ -360,7 +364,7 @@ git pull
 
 Skills update instantly through the symlink.
 
----
+***
 
 ## 🗑️ Uninstalling
 
@@ -375,7 +379,7 @@ rm -rf ~/.claude/superpowers-plus
 rm -rf .superpowers/
 ```
 
----
+***
 
 ## 🤝 Contributing
 
@@ -383,35 +387,33 @@ See `CLAUDE.md` for contributor guidelines. The short version: this repo has a 9
 
 **Important**: Before contributing to this repository, please read `.github/PULL_REQUEST_TEMPLATE.md` and fill in every section. Do not leave any sections blank or use placeholder text.
 
----
+***
 
 ## 🙏 Acknowledgments
 
 Superpowers-Plus is built on the shoulders of giants:
 
-- **Original Superpowers**: [https://github.com/obra/superpowers](https://github.com/obra/superpowers) by [Jesse Vincent](https://blog.fsck.com)
-- **Pyramid Memory System**: Community contribution to the Superpowers project
-- **Prime Radiant**: [https://primeradiant.com](https://primeradiant.com)
+- **Original Superpowers**: <https://github.com/obra/superpowers> by [Jesse Vincent](https://blog.fsck.com)
 
 Special thanks to the Superpowers community for inspiring this enhanced version with pyramid decomposition and memory management capabilities.
 
----
+***
 
 ## 📣 Community
 
 Built by [Jesse Vincent](https://blog.fsck.com) and [Prime Radiant](https://primeradiant.com). Pyramid Memory system contributed by the community.
 
 - **Discord**: [Join us](https://discord.gg/35wsABTejz)
-- **Issues**: https://github.com/obra/superpowers/issues
+- **Issues**: <https://github.com/obra/superpowers/issues>
 - **Release Announcements**: [Sign up](https://primeradiant.com/superpowers/)
 
----
+***
 
 ## 📄 License
 
 MIT License — see LICENSE file for details.
 
----
+***
 
 ## 💖 Sponsorship
 
