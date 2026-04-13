@@ -1,6 +1,8 @@
 # Superpowers-Plus
 
-给 coding agent 装上结构化的大脑 —— 不只是工具，更是**纪律**。
+🚀 给 coding agent 装上结构化的大脑 —— 不只是工具，更是**纪律**。
+
+[**English**](README.en.md) | 中文
 
 Superpowers-Plus 是一套为 AI 编程助手设计的结构化工作流技能系统，基于可组合的"技能"（skills）自动触发。你的 agent 不只是写代码 —— 它会设计、分解、规划、测试、审查和记忆。
 
@@ -154,9 +156,9 @@ python3 <skill-path>/memory-management/scripts/run_memory_cli.py init \
 
 ---
 
-## 核心功能
+## ✨ 核心功能
 
-### 1. 金字塔分解系统（Pyramid Decomposition）
+### 1. 📐 金字塔分解系统（Pyramid Decomposition）
 
 处理大型、模糊、跨边界的复杂需求：
 
@@ -177,7 +179,7 @@ Level 0: 电商平台
 
 每个叶子节点都是独立的业务功能单元，由单独的 Agent 负责实现。
 
-### 2. 记忆管理系统（Memory Management）
+### 2. 🧠 记忆管理系统（Memory Management）
 
 基于 CozoDB 图数据库的持久化记忆：
 
@@ -187,7 +189,7 @@ Level 0: 电商平台
 - **文件引用**：追踪代码文件与节点的关联
 - **语义召回**：基于向量相似度的历史决策检索
 
-### 3. 自适应路由门控
+### 3. 🎯 自适应路由门控
 
 根据任务特征自动选择最合适的工作流：
 
@@ -200,7 +202,7 @@ Level 0: 电商平台
 
 ---
 
-## 技能列表
+## 📚 技能列表
 
 ### 路由层
 - **using-superpowers** —— 入口路由器。分类任务，分发到正确的工作流。
@@ -226,7 +228,7 @@ Level 0: 电商平台
 
 ---
 
-## 设计哲学
+## 🎯 设计哲学
 
 ### 核心问题
 
@@ -254,7 +256,7 @@ Level 0: 电商平台
 
 ---
 
-## 方法论
+## 📖 方法论
 
 工作流镜像资深工程师的实际思考方式：
 
@@ -285,7 +287,7 @@ Level 0: 电商平台
 
 ---
 
-## 记忆架构
+## 🧠 记忆架构
 
 持久化记忆系统解决上下文爆炸：
 
@@ -311,7 +313,7 @@ Level 0: 电商平台
 
 ---
 
-## 技术亮点
+## 💡 技术亮点
 
 ### PEP 723 独立脚本
 
@@ -378,6 +380,18 @@ rm -rf .superpowers/
 参见 `CLAUDE.md` 了解贡献者指南。简短版本：这个仓库有 94% 的 PR 拒绝率。阅读指南。遵循 `writing-skills`。用压力场景测试。展示人类参与的证据。
 
 **重要**：在为此仓库做出贡献之前，请阅读 `.github/PULL_REQUEST_TEMPLATE.md` 并填写每一部分。不要留空或使用占位符文本。
+
+---
+
+## 🙏 致谢
+
+Superpowers-Plus 站在巨人的肩膀上：
+
+- **原版 Superpowers**: [https://github.com/obra/superpowers](https://github.com/obra/superpowers) by [Jesse Vincent](https://blog.fsck.com)
+- **金字塔记忆系统**: Superpowers 项目的社区贡献
+- **Prime Radiant**: [https://primeradiant.com](https://primeradiant.com)
+
+特别感谢 Superpowers 社区的启发，让我们能够构建这个带有金字塔分解和记忆管理能力的增强版本。
 
 ---
 
